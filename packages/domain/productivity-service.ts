@@ -1,0 +1,4 @@
+import type {ProductivitySnapshot,Goal} from "./productivity";
+export function calculateScore(snapshot:Omit<ProductivitySnapshot,"score">){const completion=Math.min(60,snapshot.completed*10);const overduePenalty=Math.min(30,snapshot.overdue*5);const schedule=Math.min(10,snapshot.scheduledMinutes>0?(snapshot.completedMinutes/snapshot.scheduledMinutes)*10:0);return Math.max(0,Math.round(completion+schedule-overduePenalty));}
+export function goalProgress(goal:Goal){if(goal.target<=0)return 0;return Math.min(100,Math.round((goal.current/goal.target)*100));}
+export function isGoalComplete(goal:Goal){return goal.current>=goal.target;}
