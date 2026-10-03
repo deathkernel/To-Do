@@ -23,3 +23,4 @@ export async function insertAutomation(row:any){const rows=await getDb().insert(
 export async function listAutomations(ownerId:string){return getDb().select().from(automationRules).where(eq(automationRules.ownerId,ownerId));}
 export async function insertApiToken(row:any){const rows=await getDb().insert(apiTokens).values(row).returning();return rows[0];}
 export async function listApiTokens(ownerId:string){return getDb().select().from(apiTokens).where(eq(apiTokens.ownerId,ownerId));}
+export async function findActiveApiToken(tokenHash:string){const rows=await getDb().select().from(apiTokens).where(and(eq(apiTokens.tokenHash,tokenHash),eq(apiTokens.revokedAt,null as any)));return rows[0]??null;}
