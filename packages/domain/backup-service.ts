@@ -1,8 +1,8 @@
 import type {BackupManifest,ImportValidationResult} from "./backup";
 export function validateImport(manifest:BackupManifest):ImportValidationResult{
   const errors:string[]=[];
-  if(!manifest.version)errors.push("Missing backup version");
-  if(!manifest.createdAt)errors.push("Missing backup timestamp");
-  if(!manifest.userId)errors.push("Missing owner");
-  return {valid:errors.length===0,errors};
+  if(!Number.isInteger(manifest.schemaVersion)||manifest.schemaVersion<1)errors.push("Invalid schema version");
+  if(!manifest.accountId)errors.push("Missing account ID");
+  if(!manifest.exportedAt||Number.isNaN(Date.parse(manifest.exportedAt)))errors.push("Invalid export timestamp");
+  return {valid:errors.length===0,errors,warnings:[]};
 }
