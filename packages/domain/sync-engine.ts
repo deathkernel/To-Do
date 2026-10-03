@@ -1,6 +1,8 @@
 import type {SyncOperation,SyncResponse} from "./sync";
-export function acceptOperations(operations:SyncOperation[],knownIds:Set<string>):SyncResponse{
-  const accepted:string[]=[],rejected:string[]=[],conflicted:string[]=[];
-  for(const op of operations){if(knownIds.has(op.id)){rejected.push(op.id);continue;} if(op.baseRevision!==undefined&&op.baseRevision<0){conflicted.push(op.id);continue;} accepted.push(op.id);knownIds.add(op.id);}
-  return {accepted,rejected,conflicted,cursor:String(Date.now())};
+export function processOperation(operation:SyncOperation,knownIds:Set<string>,currentRevision:number):SyncResponse{
+  if(knownIds.has(operation.operationId))return {operationId:operation.operationId,result:"rejected",revision:currentRevision,cursor:String(currentRevision),reason:"duplicate_operation"};
+  if(operation.baseRevision!==currentRevision)return {operationId:operation.operationId,result:"conflicted",revision:currentRevision,cursor:String(currentRevision),reason:"stale_revision"};
+  knownIds.add(operation.operationId);
+  const revision=currentRevision+1;
+  return {operationId:operation.operationId,result:"accepted",revision,cursor:String(revision)};
 }
