@@ -1,0 +1,1 @@
+{"name":"@todo/db","private":true,"type":"module","scripts":{"generate":"drizzle-kit generate","migrate":"drizzle-kit migrate","push":"drizzle-kit push"},"dependencies":{"drizzle-orm":"^0.44.0","postgres":"^3.4.7"},"devDependencies":{"drizzle-kit":"^0.31.0","typescript":"^5.9.0"}}
