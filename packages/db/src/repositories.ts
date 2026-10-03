@@ -1,6 +1,7 @@
 import {and,eq} from "drizzle-orm";
 import {getDb,users,sessions,projects,sections,labels,tasks,reminders,comments,workspaces,workspaceMembers,goals,automationRules,apiTokens} from "./index";
 
+export async function getDbUser(id:string){const rows=await getDb().select().from(users).where(eq(users.id,id));return rows[0]??null;}
 export async function findUserByEmail(email:string){const rows=await getDb().select().from(users).where(eq(users.email,email.toLowerCase()));return rows[0]??null;}
 export async function createUser(row:{id:string,email:string,displayName:string,passwordHash:string}){const rows=await getDb().insert(users).values(row).returning();return rows[0];}
 export async function createSession(row:{id:string,userId:string,tokenHash:string,expiresAt:Date}){const rows=await getDb().insert(sessions).values(row).returning();return rows[0];}
