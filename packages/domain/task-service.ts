@@ -74,7 +74,11 @@ export class TaskService {
     });
   }
 
-  async repositoryList(userId: string): Promise<Task[]> {\n    return this.repository.list(userId);\n  }\n\n  async restore(userId: string, taskId: string): Promise<Task> {
+  async repositoryList(userId: string): Promise<Task[]> {
+    return this.repository.list(userId);
+  }
+
+  async restore(userId: string, taskId: string): Promise<Task> {
     return this.repository.update(userId, taskId, {
       status: "active",
       deletedAt: null,
