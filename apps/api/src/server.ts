@@ -1,6 +1,9 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { registerTaskRoutes } from "./task-routes";
+import { registerProjectRoutes } from "./project-routes";
+import { registerLabelRoutes } from "./label-routes";
+import { registerSearchRoutes } from "./search-routes";
 
 export function buildServer() {
   const app = Fastify({ logger: true });
@@ -13,6 +16,9 @@ export function buildServer() {
   }));
 
   registerTaskRoutes(app);
+  registerProjectRoutes(app);
+  registerLabelRoutes(app);
+  registerSearchRoutes(app);
   return app;
 }
 
