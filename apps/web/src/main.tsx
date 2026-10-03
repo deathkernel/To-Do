@@ -1,59 +1,23 @@
-import { StrictMode, useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { completeTask, createProject, createTask, deleteTask, listLabels, listProjects, listTasks, reopenTask, type ApiLabel, type ApiProject, type ApiTask } from "./api";
+import {StrictMode,useEffect,useMemo,useState} from "react";
+import {createRoot} from "react-dom/client";
+import {completeTask,createProject,createTask,deleteTask,listLabels,listProjects,listTasks,reopenTask,type ApiLabel,type ApiProject,type ApiTask} from "./api";
+import {TaskRow,StatCard} from "./components";
+import {useLocalState} from "./hooks";
 import "./styles.css";
-
-const USER_ID = "local-user";
-
-function App() {
-  const [tasks,setTasks]=useState<ApiTask[]>([]);
-  const [projects,setProjects]=useState<ApiProject[]>([]);
-  const [labels,setLabels]=useState<ApiLabel[]>([]);
-  const [title,setTitle]=useState("");
-  const [projectName,setProjectName]=useState("");
-  const [showCompleted,setShowCompleted]=useState(false);
-  const [error,setError]=useState("");
-
-  async function refresh() {
-    try {
-      const [t,p,l]=await Promise.all([listTasks(USER_ID),listProjects(USER_ID),listLabels(USER_ID)]);
-      setTasks(t); setProjects(p); setLabels(l); setError("");
-    } catch(e) { setError(e instanceof Error ? e.message : "Unable to load data"); }
-  }
-  useEffect(()=>{void refresh();},[]);
-
-  async function addTask() {
-    if(!title.trim()) return;
-    try { await createTask(USER_ID,title.trim()); setTitle(""); await refresh(); }
-    catch(e){setError(e instanceof Error?e.message:"Unable to create task");}
-  }
-  async function addProject() {
-    if(!projectName.trim()) return;
-    try { await createProject(USER_ID,projectName.trim()); setProjectName(""); await refresh(); }
-    catch(e){setError(e instanceof Error?e.message:"Unable to create project");}
-  }
-  async function toggle(task:ApiTask) {
-    try { if(task.status==="completed") await reopenTask(USER_ID,task.id); else await completeTask(USER_ID,task.id); await refresh(); }
-    catch(e){setError(e instanceof Error?e.message:"Unable to update task");}
-  }
-  async function remove(id:string) { try{await deleteTask(USER_ID,id);await refresh();}catch(e){setError(e instanceof Error?e.message:"Unable to delete task");} }
-
-  const visible=tasks.filter(t=>showCompleted||t.status!=="completed");
-
-  return <main className="app-shell">
-    <aside className="sidebar">
-      <strong>To-Do</strong>
-      <nav><button>Inbox</button><button>Today</button><button>Upcoming</button><button>Projects</button></nav>
-      <div className="side-section"><strong>Projects</strong>{projects.map(p=><div className="side-item" key={p.id}>{p.name}</div>)}</div>
-      <div className="side-section"><strong>Labels</strong>{labels.map(l=><div className="side-item" key={l.id}>#{l.name}</div>)}</div>
-    </aside>
-    <section className="content">
-      <header><h1>Inbox</h1><button onClick={()=>setShowCompleted(!showCompleted)}>{showCompleted?"Hide completed":"Completed"}</button></header>
-      <form className="quick-add" onSubmit={e=>{e.preventDefault();void addTask();}}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Add a task…" aria-label="Task title"/><button className="primary" type="submit">Add task</button></form>
-      <form className="quick-add" onSubmit={e=>{e.preventDefault();void addProject();}}><input value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="New project…" aria-label="Project name"/><button type="submit">Add project</button></form>
-      {error&&<p role="alert">{error}</p>}
-      <section className="task-list">{visible.length===0?<p className="empty">No tasks yet.</p>:visible.map(task=><article className={`task ${task.status==="completed"?"done":""}`} key={task.id}><button className="check" onClick={()=>void toggle(task)}>{task.status==="completed"?"↶":"✓"}</button><span>{task.title}</span><small>P{task.priority}</small><button className="delete" onClick={()=>void remove(task.id)}>×</button></article>)}</section>
-    </section>
-  </main>;
+const USER_ID="local-user";
+type View="inbox"|"today"|"upcoming"|"completed"|"projects"|"goals"|"reminders"|"automations"|"settings";
+function App(){
+ const [tasks,setTasks]=useState<ApiTask[]>([]),[projects,setProjects]=useState<ApiProject[]>([]),[labels,setLabels]=useState<ApiLabel[]>([]);
+ const [title,setTitle]=useState(""),[projectName,setProjectName]=useState(""),[search,setSearch]=useState(""),[view,setView]=useState<View>("inbox"),[selectedProject,setSelectedProject]=useState(""),[error,setError]=useState("");
+ const [dark,setDark]=useLocalState("todo-theme",false);
+ async function refresh(){try{const [t,p,l]=await Promise.all([listTasks(USER_ID),listProjects(USER_ID),listLabels(USER_ID)]);setTasks(t);setProjects(p);setLabels(l);setError("")}catch(e){setError(e instanceof Error?e.message:"Unable to load data")}}
+ useEffect(()=>{void refresh();if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{})},[]);
+ async function addTask(){if(!title.trim())return;try{await createTask(USER_ID,title.trim());setTitle("");await refresh()}catch(e){setError(e instanceof Error?e.message:"Unable to create task")}}
+ async function addProject(){if(!projectName.trim())return;try{await createProject(USER_ID,projectName.trim());setProjectName("");await refresh()}catch(e){setError(e instanceof Error?e.message:"Unable to create project")}}
+ const today=new Date();today.setHours(0,0,0,0);const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1);
+ const visible=useMemo(()=>tasks.filter(t=>{if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;if(view==="completed")return t.status==="completed";if(view==="today")return !!t.dueAt&&new Date(t.dueAt)>=today&&new Date(t.dueAt)<tomorrow&&t.status!=="completed";if(view==="upcoming")return !!t.dueAt&&new Date(t.dueAt)>=tomorrow&&t.status!=="completed";if(view==="projects"&&selectedProject)return t.projectId===selectedProject;return t.status!=="completed"}),[tasks,search,view,selectedProject]);
+ const active=tasks.filter(t=>t.status!=="completed").length,done=tasks.filter(t=>t.status==="completed").length;
+ const nav=(v:View,label:string)=><button className={view===v?"active":""} onClick={()=>setView(v)}>{label}</button>;
+ return <div className={dark?"app-shell dark":"app-shell"}><aside className="sidebar"><div className="brand">✓ <strong>To-Do</strong></div><input className="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tasks…"/><nav>{nav("inbox","Inbox")} {nav("today","Today")} {nav("upcoming","Upcoming")} {nav("completed","Completed")}</nav><div className="side-section"><div className="section-title">Projects</div>{projects.map(p=><button className="side-item" key={p.id} onClick={()=>{setSelectedProject(p.id);setView("projects")}}>● {p.name}</button>)}<form onSubmit={e=>{e.preventDefault();void addProject()}}><input value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="New project…"/></form></div><div className="side-section"><div className="section-title">Labels</div>{labels.map(l=><div className="side-item" key={l.id}>#{l.name}</div>)}</div><div className="side-section">{nav("goals","Goals")} {nav("reminders","Reminders")} {nav("automations","Automations")} {nav("settings","Settings")}</div><button className="theme" onClick={()=>setDark(!dark)}>{dark?"Light mode":"Dark mode"}</button></aside><main className="content"><header className="topbar"><div><small>Workspace</small><h1>{view==="projects"&&selectedProject?(projects.find(p=>p.id===selectedProject)?.name??"Project"):view[0].toUpperCase()+view.slice(1)}</h1></div><button onClick={refresh}>↻</button></header>{error&&<div className="error">{error}</div>}{view==="inbox"||view==="today"||view==="upcoming"||view==="completed"||view==="projects"?<><div className="stats"><StatCard label="Active" value={active}/><StatCard label="Completed" value={done}/><StatCard label="Projects" value={projects.length}/><StatCard label="Labels" value={labels.length}/></div><form className="quick-add" onSubmit={e=>{e.preventDefault();void addTask()}}><input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder="What needs to be done?"/><button className="primary">Add task</button></form><section className="task-list">{visible.length?visible.map(t=><TaskRow key={t.id} task={t} onToggle={()=>void (t.status==="completed"?reopenTask(USER_ID,t.id):completeTask(USER_ID,t.id)).then(refresh)} onDelete={()=>void deleteTask(USER_ID,t.id).then(refresh)}/>):<div className="empty"><strong>Nothing here 🎉</strong><span>Your list is clear.</span></div>}</section></>:<section className="panel"><h2>{view[0].toUpperCase()+view.slice(1)}</h2><p>This module has an API surface and domain foundation. The full interactive settings/editor is the next UI layer.</p></section>}</main></div>
 }
 createRoot(document.getElementById("root")!).render(<StrictMode><App/></StrictMode>);
