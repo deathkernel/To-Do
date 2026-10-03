@@ -33,7 +33,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
     const params = request.params as { id: string };
     const body = request.body as { title?: string; priority?: "P1"|"P2"|"P3"|"P4"; dueAt?: string };
     try {
-      const task = await service.update(params.id, user.id, {
+      const task = await service.update(user.id, params.id, {
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.priority !== undefined ? { priority: body.priority } : {}),
         ...(body.dueAt !== undefined ? { dueAt: body.dueAt } : {})
@@ -49,7 +49,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
     const params = request.params as { id: string };
     const body = request.body as {};
     try {
-      return reply.send(await service.complete(params.id, user.id));
+      return reply.send(await service.complete(user.id, params.id));
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to complete task" });
     }
@@ -60,7 +60,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
     const params = request.params as { id: string };
     const body = request.body as { userId: string };
     try {
-      return reply.send(await service.reopen(params.id, user.id));
+      return reply.send(await service.reopen(user.id, params.id));
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to reopen task" });
     }
@@ -71,7 +71,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
     const params = request.params as { id: string };
     const query = request.query as { userId?: string };
     try {
-      await service.remove(params.id, user.id);
+      await service.remove(user.id, params.id);
       return reply.code(204).send();
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to delete task" });
