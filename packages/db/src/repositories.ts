@@ -1,4 +1,4 @@
-import {and,eq} from "drizzle-orm";
+import {and,eq,isNull} from "drizzle-orm";
 import {getDb,users,sessions,projects,labels,tasks,reminders,comments,workspaces,goals,automationRules,apiTokens} from "./index";
 export async function getDbUser(id:string){const rows=await getDb().select().from(users).where(eq(users.id,id));return rows[0]??null;}
 export async function findUserByEmail(email:string){const rows=await getDb().select().from(users).where(eq(users.email,email.toLowerCase()));return rows[0]??null;}
@@ -23,4 +23,4 @@ export async function insertAutomation(row:any){const rows=await getDb().insert(
 export async function listAutomations(ownerId:string){return getDb().select().from(automationRules).where(eq(automationRules.ownerId,ownerId));}
 export async function insertApiToken(row:any){const rows=await getDb().insert(apiTokens).values(row).returning();return rows[0];}
 export async function listApiTokens(ownerId:string){return getDb().select().from(apiTokens).where(eq(apiTokens.ownerId,ownerId));}
-export async function findActiveApiToken(tokenHash:string){const rows=await getDb().select().from(apiTokens).where(and(eq(apiTokens.tokenHash,tokenHash),eq(apiTokens.revokedAt,null as any)));return rows[0]??null;}
+export async function findActiveApiToken(tokenHash:string){const rows=await getDb().select().from(apiTokens).where(and(eq(apiTokens.tokenHash,tokenHash),isNull(apiTokens.revokedAt)));return rows[0]??null;}
