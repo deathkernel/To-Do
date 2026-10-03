@@ -1,0 +1,10 @@
+openapi: 3.1.0
+info: {title: To-Do Planning API, version: 0.1.0}
+paths:
+  /api/v1/calendar: {get: {summary: Get calendar tasks}}
+  /api/v1/schedules/parse: {post: {summary: Parse natural-language schedule}}
+  /api/v1/reminders: {post: {summary: Create reminder}, get: {summary: List reminders}}
+  /api/v1/notifications/preferences: {get: {summary: Get notification preferences}, patch: {summary: Update notification preferences}}
+  /api/v1/tasks/{taskId}/comments: {post: {summary: Add task comment}, get: {summary: List comments}}
+  /api/v1/attachments: {post: {summary: Create attachment metadata}}
+  /api/v1/views: {post: {summary: Save custom view}, get: {summary: List saved views}}
