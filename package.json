@@ -12,7 +12,9 @@
     "db:push": "pnpm --filter @todo/db push",
     "test": "vitest run && pnpm --filter @todo/api test",
     "typecheck": "tsc --noEmit && pnpm --filter @todo/api typecheck && pnpm --filter @todo/web exec tsc --noEmit",
-    "audit": "pnpm test && pnpm typecheck"
+    "audit": "pnpm test && pnpm typecheck",
+    "build": "pnpm --filter @todo/web build",
+    "build:all": "pnpm build"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
