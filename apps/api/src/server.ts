@@ -1,9 +1,9 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import { registerTaskRoutes } from "./task-routes";
 
 export function buildServer() {
   const app = Fastify({ logger: true });
-
   app.register(cors, { origin: true });
 
   app.get("/health", async () => ({
@@ -12,6 +12,7 @@ export function buildServer() {
     timestamp: new Date().toISOString()
   }));
 
+  registerTaskRoutes(app);
   return app;
 }
 
