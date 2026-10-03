@@ -1,10 +1,18 @@
-# Batch 05 — Automation, UX, Platforms & Advanced Productivity
+# Batch 05 — Phases 13–15
 
-Covers features 23–27:
-23. Automation & Workflow
-24. UI / UX & Customization
-25. Platforms & Devices
-26. Quick Add & Power-User Features
-27. Advanced Productivity System
+## Templates & Data
+- Persistent template schema/repository.
+- Export/import validation primitives.
+- Device registration for platform clients.
 
-This batch completes the domain/specification foundation for the 27-feature product scope. It does not claim that production UI, background workers, native clients, or integrations are already implemented.
+## API & Platforms
+- Public API scope model.
+- Idempotency-key validation.
+- Device lifecycle repository for web/desktop/iOS/Android.
+
+## Production & QA
+- CI already runs tests and typecheck.
+- Production checklist remains the source of truth.
+- Security-sensitive operations have domain validation primitives.
+
+External deployment credentials, provider accounts and actual mobile/desktop builds remain environment-specific release work.
