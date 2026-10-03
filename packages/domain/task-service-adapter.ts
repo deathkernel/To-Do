@@ -1,0 +1,3 @@
+import type {TaskRepository as LegacyTaskRepository} from "./task-service";
+import type {TaskRepository} from "./task-repository";
+export function adaptTaskRepository(repository:TaskRepository):LegacyTaskRepository{return{create:repository.create.bind(repository),findById:async(userId,id)=>await repository.getById(id,userId)??null,update:async(userId,id,patch)=>{const task=await repository.getById(id,userId);if(!task)throw new Error("Task not found");return repository.save({...task,...patch} as typeof task)},list:repository.list.bind(repository)}}
