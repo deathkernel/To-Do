@@ -1,0 +1,4 @@
+import {and,eq} from "drizzle-orm";import {getDb,syncOperations,syncState} from "./index";
+export async function getSyncRevision(userId:string){const rows=await getDb().select().from(syncState).where(eq(syncState.userId,userId));return rows[0]?.revision??0;}
+export async function hasSyncOperation(userId:string,operationId:string){const rows=await getDb().select().from(syncOperations).where(and(eq(syncOperations.userId,userId),eq(syncOperations.operationId,operationId)));return rows.length>0;}
+export async function recordSyncOperation(userId:string,operationId:string,revision:number){await getDb().insert(syncOperations).values({operationId,userId,revision});await getDb().insert(syncState).values({userId,revision}).onConflictDoUpdate({target:syncState.userId,set:{revision,updatedAt:new Date()}});}
