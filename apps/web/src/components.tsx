@@ -1,0 +1,3 @@
+import type {ApiTask} from "./api";
+export function TaskRow({task,onToggle,onDelete}:{task:ApiTask;onToggle:()=>void;onDelete:()=>void}){return <article className={"task "+(task.status==="completed"?"done":"")}><button className="check" onClick={onToggle}>{task.status==="completed"?"↶":"✓"}</button><div className="task-main"><span>{task.title}</span><small>P{task.priority}{task.dueAt?" · "+new Date(task.dueAt).toLocaleString():""}</small></div><button className="delete" onClick={onDelete}>×</button></article>}
+export function StatCard({label,value}:{label:string;value:string|number}){return <div className="stat-card"><small>{label}</small><strong>{value}</strong></div>}
