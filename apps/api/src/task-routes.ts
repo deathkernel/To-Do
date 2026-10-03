@@ -1,80 +1,16 @@
-import type { FastifyInstance } from "fastify";
+import type {FastifyInstance} from "fastify";
 import { TaskService } from "../../../packages/domain/task-service";
 import { PostgresTaskRepository } from "../../../packages/db/src/task-repository";
 import { authenticated } from "./middleware";
-
-export function registerTaskRoutes(app: FastifyInstance) {
-  const repository = new PostgresTaskRepository();
-  const service = new TaskService(repository);
-
-  app.post("/api/v1/tasks", async (request, reply) => {
-    const user = await authenticated(request, reply); if (!user) return;
-    const body = request.body as { title: string; projectId?: string };
-    try {
-      const task = await service.create({
-        userId: user.id,
-        title: body.title,
-        projectId: body.projectId ?? null
-      });
-      return reply.code(201).send(task);
-    } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "Invalid task" });
-    }
-  });
-
-  app.get("/api/v1/tasks", async (request, reply) => {
-    const user = await authenticated(request, reply); if (!user) return;
-    const query = request.query as { userId?: string };
-    return service.repositoryList(user.id);
-  });
-
-  app.patch("/api/v1/tasks/:id", async (request, reply) => {
-    const user = await authenticated(request, reply); if (!user) return;
-    const params = request.params as { id: string };
-    const body = request.body as { title?: string; priority?: "P1"|"P2"|"P3"|"P4"; dueAt?: string };
-    try {
-      const task = await service.update(user.id, params.id, {
-        ...(body.title !== undefined ? { title: body.title } : {}),
-        ...(body.priority !== undefined ? { priority: body.priority } : {}),
-        ...(body.dueAt !== undefined ? { dueAt: body.dueAt } : {})
-      });
-      return reply.send(task);
-    } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "Invalid task update" });
-    }
-  });
-
-  app.post("/api/v1/tasks/:id/complete", async (request, reply) => {
-    const user = await authenticated(request, reply); if (!user) return;
-    const params = request.params as { id: string };
-    const body = request.body as {};
-    try {
-      return reply.send(await service.complete(user.id, params.id));
-    } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to complete task" });
-    }
-  });
-
-  app.post("/api/v1/tasks/:id/reopen", async (request, reply) => {
-    const user = await authenticated(request, reply); if (!user) return;
-    const params = request.params as { id: string };
-    const body = request.body as { userId: string };
-    try {
-      return reply.send(await service.reopen(user.id, params.id));
-    } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to reopen task" });
-    }
-  });
-
-  app.delete("/api/v1/tasks/:id", async (request, reply) => {
-    const user = await authenticated(request, reply); if (!user) return;
-    const params = request.params as { id: string };
-    const query = request.query as { userId?: string };
-    try {
-      await service.remove(user.id, params.id);
-      return reply.code(204).send();
-    } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to delete task" });
-    }
-  });
+import {requireScope} from "./require-auth";
+import {z} from "zod";
+const createSchema=z.object({title:z.string().trim().min(1).max(500),projectId:z.string().uuid().nullable().optional(),description:z.string().max(10000).optional(),parentTaskId:z.string().uuid().nullable().optional(),sectionId:z.string().uuid().nullable().optional(),priority:z.enum(["P1","P2","P3","P4"]).optional(),dueAt:z.string().datetime().nullable().optional(),deadlineAt:z.string().datetime().nullable().optional(),durationMinutes:z.number().int().min(0).max(1440).nullable().optional(),recurrence:z.string().max(1000).nullable().optional(),position:z.string().max(100).optional()});
+const updateSchema=createSchema.partial();
+export function registerTaskRoutes(app:FastifyInstance){const repository=new PostgresTaskRepository();const service=new TaskService(repository);
+ app.post("/api/v1/tasks",async(request,reply)=>{try{const user=await requireScope(request,"tasks:write");const body=createSchema.parse(request.body);return reply.code(201).send(await service.create({...body,userId:user.id}));}catch(error){return reply.code(error instanceof Error&&error.message.startsWith("API token lacks")?403:400).send({error:error instanceof Error?error.message:"Invalid task"});}});
+ app.get("/api/v1/tasks",async(request,reply)=>{try{const user=await requireScope(request,"tasks:read");return service.repositoryList(user.id);}catch(error){return reply.code(error instanceof Error&&error.message.startsWith("API token lacks")?403:401).send({error:error instanceof Error?error.message:"Authentication required"});}});
+ app.patch("/api/v1/tasks/:id",async(request,reply)=>{try{const user=await requireScope(request,"tasks:write");const params=z.object({id:z.string().uuid()}).parse(request.params);const body=updateSchema.parse(request.body);return reply.send(await service.update(user.id,params.id,body));}catch(error){return reply.code(error instanceof Error&&error.message.startsWith("API token lacks")?403:400).send({error:error instanceof Error?error.message:"Invalid task update"});}});
+ app.post("/api/v1/tasks/:id/complete",async(request,reply)=>{try{const user=await requireScope(request,"tasks:write");const {id}=z.object({id:z.string().uuid()}).parse(request.params);return reply.send(await service.complete(user.id,id));}catch(error){return reply.code(error instanceof Error&&error.message.startsWith("API token lacks")?403:400).send({error:error instanceof Error?error.message:"Unable to complete task"});}});
+ app.post("/api/v1/tasks/:id/reopen",async(request,reply)=>{try{const user=await requireScope(request,"tasks:write");const {id}=z.object({id:z.string().uuid()}).parse(request.params);return reply.send(await service.reopen(user.id,id));}catch(error){return reply.code(error instanceof Error&&error.message.startsWith("API token lacks")?403:400).send({error:error instanceof Error?error.message:"Unable to reopen task"});}});
+ app.delete("/api/v1/tasks/:id",async(request,reply)=>{try{const user=await requireScope(request,"tasks:write");const {id}=z.object({id:z.string().uuid()}).parse(request.params);await service.remove(user.id,id);return reply.code(204).send();}catch(error){return reply.code(error instanceof Error&&error.message.startsWith("API token lacks")?403:400).send({error:error instanceof Error?error.message:"Unable to delete task"});}});
 }
