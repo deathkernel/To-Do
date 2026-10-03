@@ -1,8 +1,7 @@
 import type {FastifyInstance} from "fastify";
 import {randomUUID} from "node:crypto";
-import {authenticated} from "./middleware";
+import {z} from "zod";
+import {requireScope} from "./require-auth";
 import {insertProject,listUserProjects} from "../../../packages/db/src/repositories";
-export function registerProjectRoutes(app:FastifyInstance){
- app.get("/api/v1/projects",async(req,reply)=>{const u=await authenticated(req,reply);if(!u)return;return listUserProjects(u.id)});
- app.post("/api/v1/projects",async(req,reply)=>{const u=await authenticated(req,reply);if(!u)return;const b=req.body as any;if(typeof b.name!=="string"||!b.name.trim())return reply.code(400).send({error:"Project name is required"});const now=new Date();return reply.code(201).send(await insertProject({id:randomUUID(),userId:u.id,name:b.name.trim(),description:b.description??null,color:b.color??null,icon:b.icon??null,favorite:false,archived:false,position:0,createdAt:now,updatedAt:now}))});
-}
+const createProjectSchema=z.object({name:z.string().trim().min(1).max(200),description:z.string().max(10000).nullable().optional(),color:z.string().max(32).nullable().optional(),icon:z.string().max(64).nullable().optional()});
+export function registerProjectRoutes(app:FastifyInstance){app.get("/api/v1/projects",async(req,reply)=>{try{const u=await requireScope(req,"projects:read");return listUserProjects(u.id);}catch(e){return reply.code(401).send({error:e instanceof Error?e.message:"Authentication required"});}});app.post("/api/v1/projects",async(req,reply)=>{try{const u=await requireScope(req,"projects:write");const b=createProjectSchema.parse(req.body);const now=new Date();return reply.code(201).send(await insertProject({id:randomUUID(),userId:u.id,name:b.name,description:b.description??null,color:b.color??null,icon:b.icon??null,favorite:false,archived:false,position:0,createdAt:now,updatedAt:now}));}catch(e){return reply.code(e instanceof Error&&e.message.startsWith("API token lacks")?403:400).send({error:e instanceof Error?e.message:"Invalid project"});}});}
