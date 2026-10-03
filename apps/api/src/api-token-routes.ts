@@ -2,9 +2,12 @@ import type {FastifyInstance} from "fastify";
 import crypto from "node:crypto";
 import {createHash} from "node:crypto";
 import {authenticated} from "./middleware";
-import {insertApiToken,listApiTokens} from "../../../packages/db/src/repositories";
+import {insertApiToken,listApiTokens,revokeApiToken} from "../../../packages/db/src/repositories";
+import {DEFAULT_API_SCOPES} from "./auth";
+const ALLOWED_SCOPES=["tasks:read","tasks:write","projects:read","projects:write","labels:read","labels:write","comments:read","comments:write","reminders:read","reminders:write","automations:read","automations:write","workspaces:read","workspaces:write","sync:read","sync:write"];
 function publicToken(row:any){const {tokenHash,...safe}=row;return {...safe,scopes:typeof safe.scopes==="string"?JSON.parse(safe.scopes):safe.scopes};}
 export function registerApiTokenRoutes(app:FastifyInstance){
  app.get("/api/v1/api-tokens",async(req,reply)=>{const u=await authenticated(req,reply);if(!u)return;return (await listApiTokens(u.id)).map(publicToken);});
- app.post("/api/v1/api-tokens",async(req,reply)=>{const u=await authenticated(req,reply);if(!u)return;const raw="td_"+crypto.randomBytes(32).toString("hex");const b=req.body as any;const scopes=Array.isArray(b?.scopes)?b.scopes.filter((x:any)=>typeof x==="string"):["tasks:read","tasks:write"];if(scopes.length>20)return reply.code(400).send({error:"Too many scopes"});const item=await insertApiToken({id:crypto.randomUUID(),ownerId:u.id,name:typeof b?.name==="string"&&b.name.trim()?b.name.trim():"API token",tokenHash:createHash("sha256").update(raw).digest("hex"),scopes:JSON.stringify(scopes)});return reply.code(201).send({...publicToken(item),token:raw});});
+ app.post("/api/v1/api-tokens",async(req,reply)=>{const u=await authenticated(req,reply);if(!u)return;const raw="td_"+crypto.randomBytes(32).toString("hex");const b=req.body as {name?:unknown;scopes?:unknown};const requested=Array.isArray(b?.scopes)?b.scopes.filter((x):x is string=>typeof x==="string"):Array.from(DEFAULT_API_SCOPES);const scopes=[...new Set(requested)];if(!scopes.length||scopes.some(x=>!ALLOWED_SCOPES.includes(x))||scopes.length>20)return reply.code(400).send({error:"Invalid API token scopes"});const item=await insertApiToken({id:crypto.randomUUID(),ownerId:u.id,name:typeof b?.name==="string"&&b.name.trim()?b.name.trim():"API token",tokenHash:createHash("sha256").update(raw).digest("hex"),scopes:JSON.stringify(scopes)});return reply.code(201).send({...publicToken(item),token:raw});});
+ app.delete("/api/v1/api-tokens/:id",async(req,reply)=>{const u=await authenticated(req,reply);if(!u)return;const {id}=req.params as {id:string};const revoked=await revokeApiToken(u.id,id);if(!revoked)return reply.code(404).send({error:"API token not found"});return reply.code(204).send();});
 }
