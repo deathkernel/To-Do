@@ -8,8 +8,12 @@ export async function findSession(tokenHash:string){const rows=await getDb().sel
 export async function revokeSession(id:string){await getDb().update(sessions).set({revokedAt:new Date()}).where(eq(sessions.id,id));}
 export async function listUserProjects(userId:string){return getDb().select().from(projects).where(eq(projects.userId,userId));}
 export async function insertProject(row:any){const rows=await getDb().insert(projects).values(row).returning();return rows[0];}
+export async function updateProject(userId:string,id:string,patch:any){const rows=await getDb().update(projects).set({...patch,updatedAt:new Date()}).where(and(eq(projects.id,id),eq(projects.userId,userId))).returning();if(!rows[0])throw new Error("Project not found");return rows[0];}
+export async function deleteProject(userId:string,id:string){const rows=await getDb().delete(projects).where(and(eq(projects.id,id),eq(projects.userId,userId))).returning({id:projects.id});if(!rows[0])throw new Error("Project not found");}
 export async function listUserLabels(userId:string){return getDb().select().from(labels).where(eq(labels.userId,userId));}
 export async function insertLabel(row:any){const rows=await getDb().insert(labels).values(row).returning();return rows[0];}
+export async function updateLabel(userId:string,id:string,patch:any){const rows=await getDb().update(labels).set({...patch,updatedAt:new Date()}).where(and(eq(labels.id,id),eq(labels.userId,userId))).returning();if(!rows[0])throw new Error("Label not found");return rows[0];}
+export async function deleteLabel(userId:string,id:string){const rows=await getDb().delete(labels).where(and(eq(labels.id,id),eq(labels.userId,userId))).returning({id:labels.id});if(!rows[0])throw new Error("Label not found");}
 export async function listUserTasks(userId:string){return getDb().select().from(tasks).where(and(eq(tasks.userId,userId),eq(tasks.status,"active")));}
 export async function insertReminder(row:any){const rows=await getDb().insert(reminders).values(row).returning();return rows[0];}
 export async function listUserReminders(userId:string){return getDb().select().from(reminders).where(eq(reminders.userId,userId));}
