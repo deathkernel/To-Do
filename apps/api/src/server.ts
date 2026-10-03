@@ -7,6 +7,9 @@ import { registerTaskRoutes } from "./task-routes";
 import { registerProjectRoutes } from "./project-routes";
 import { registerLabelRoutes } from "./label-routes";
 import { registerSearchRoutes } from "./search-routes";
+import { registerResourceRoutes } from "./resource-routes";
+import { registerSyncRoutes } from "./sync-routes";
+import { registerApiTokenRoutes } from "./api-token-routes";
 
 export function buildServer() {
   const app=Fastify({logger:true});
@@ -20,6 +23,9 @@ export function buildServer() {
   registerProjectRoutes(app);
   registerLabelRoutes(app);
   registerSearchRoutes(app);
+  registerResourceRoutes(app);
+  registerSyncRoutes(app);
+  registerApiTokenRoutes(app);
   return app;
 }
 
