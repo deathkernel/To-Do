@@ -14,7 +14,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
       const task = await service.create({
         userId: user.id,
         title: body.title,
-        projectId: body.projectId
+        projectId: body.projectId ?? null
       });
       return reply.code(201).send(task);
     } catch (error) {
@@ -25,7 +25,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
   app.get("/api/v1/tasks", async (request, reply) => {
     const user = await authenticated(request, reply); if (!user) return;
     const query = request.query as { userId?: string };
-    return service.list(user.id);
+    return service.repositoryList(user.id);
   });
 
   app.patch("/api/v1/tasks/:id", async (request, reply) => {
