@@ -1,8 +1,2 @@
-# Batch 02 — Planning & Communication
-
-Feature groups covered:
-6. Calendar & Planning
-7. Duration, Deadlines & Scheduling
-8. Reminders & Notifications
-9. Attachments & Task Comments
-10. Task Views
+# Batch 02 — Phases 04–06
+Implemented foundations for projects/sections, saved filters, database-backed task search, scheduling/time-zone validation, recurrence, reminder persistence, and due-reminder queries. Provider-specific calendar OAuth and durable notification workers remain layered on these contracts.
