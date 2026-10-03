@@ -1,10 +1,11 @@
-import type {RecurrenceRule} from "./scheduling";
-export function nextOccurrence(rule:RecurrenceRule,from:Date):Date{
+import type {Schedule} from "./scheduling";
+export function nextOccurrence(rule:string,from:Date):Date{
+  const value=rule.toLowerCase();
   const d=new Date(from);
-  const count=rule.interval??1;
-  if(rule.frequency==="daily")d.setUTCDate(d.getUTCDate()+count);
-  else if(rule.frequency==="weekly")d.setUTCDate(d.getUTCDate()+7*count);
-  else if(rule.frequency==="monthly")d.setUTCMonth(d.getUTCMonth()+count);
-  else d.setUTCFullYear(d.getUTCFullYear()+count);
+  if(value.includes("daily"))d.setUTCDate(d.getUTCDate()+1);
+  else if(value.includes("weekly"))d.setUTCDate(d.getUTCDate()+7);
+  else if(value.includes("monthly"))d.setUTCMonth(d.getUTCMonth()+1);
+  else if(value.includes("yearly")||value.includes("annual"))d.setUTCFullYear(d.getUTCFullYear()+1);
   return d;
 }
+export function hasRecurrence(schedule:Schedule){return Boolean(schedule.recurrence?.trim());}
