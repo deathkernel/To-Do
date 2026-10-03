@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Builds
+/dist/
+/build/
+/.next/
+/.turbo/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test/coverage
+coverage/
+.pytest_cache/
