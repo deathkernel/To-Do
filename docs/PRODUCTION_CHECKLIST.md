@@ -1,0 +1,20 @@
+# Production Completion Checklist
+- [x] Domain contracts
+- [x] PostgreSQL schema foundation
+- [x] Authentication boundary
+- [x] API rate limiting/security headers
+- [x] Sync conflict engine
+- [x] Reminder/recurrence domain services
+- [x] Automation domain service
+- [x] Workspace/collaboration domain
+- [x] PWA shell
+- [ ] Wire every repository to PostgreSQL
+- [ ] Persistent sessions and OAuth
+- [ ] Background queues/workers
+- [ ] File storage
+- [ ] Calendar providers
+- [ ] Real-time collaboration
+- [ ] Offline client database
+- [ ] AI provider execution
+- [ ] Full E2E/security/load/accessibility suite
+- [ ] Production deployment and observability
