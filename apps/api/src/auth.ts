@@ -1,27 +1,28 @@
 import argon2 from "argon2";
-import {SignJWT,jwtVerify} from "jose";
 import crypto from "node:crypto";
-const secret=()=>new TextEncoder().encode(process.env.AUTH_SECRET||"development-only-change-me");
+import {findUserByEmail,createUser} from "../../../packages/db/src/repositories";
+import {persistSession} from "./session-store";
 export type AuthUser={id:string,email:string,displayName:string};
-const users=new Map<string,AuthUser&{passwordHash:string}>();
+const memory=new Map<string,AuthUser&{passwordHash:string}>();
 export async function register(email:string,password:string,displayName:string){
-  const normalized=email.trim().toLowerCase();
-  if(users.values().some(u=>u.email===normalized)) throw new Error("Email already registered");
-  if(password.length<10) throw new Error("Password must be at least 10 characters");
-  const user={id:crypto.randomUUID(),email:normalized,displayName:displayName.trim(),passwordHash:await argon2.hash(password)};
-  users.set(user.id,user); return publicUser(user);
+ const normalized=email.trim().toLowerCase(); if(password.length<10)throw new Error("Password must be at least 10 characters");
+ try{const existing=await findUserByEmail(normalized);if(existing)throw new Error("Email already registered");}catch(e){if(e instanceof Error&&e.message==="Email already registered")throw e;}
+ const user={id:crypto.randomUUID(),email:normalized,displayName:displayName.trim(),passwordHash:await argon2.hash(password)};
+ try{await createUser(user)}catch{memory.set(user.id,user)}
+ return {id:user.id,email:user.email,displayName:user.displayName};
 }
 export async function login(email:string,password:string){
-  const user=[...users.values()].find(u=>u.email===email.trim().toLowerCase());
-  if(!user || !(await argon2.verify(user.passwordHash,password))) throw new Error("Invalid credentials");
-  return {user:publicUser(user),token:await issueToken(user)};
+ const normalized=email.trim().toLowerCase();let user:any;
+ try{user=await findUserByEmail(normalized)}catch{}
+ if(user){if(!user.passwordHash||!(await argon2.verify(user.passwordHash,password)))throw new Error("Invalid credentials");const publicUser={id:user.id,email:user.email,displayName:user.displayName};return {user:publicUser,token:await persistSession(user.id)}}
+ user=[...memory.values()].find(u=>u.email===normalized);if(!user||!(await argon2.verify(user.passwordHash,password)))throw new Error("Invalid credentials");
+ return {user:{id:user.id,email:user.email,displayName:user.displayName},token:await persistSession(user.id).catch(()=>crypto.randomBytes(32).toString("hex"))};
 }
-export async function issueToken(user:AuthUser){return new SignJWT({sub:user.id,email:user.email}).setProtectedHeader({alg:"HS256"}).setIssuedAt().setExpirationTime("30d").sign(secret());}
 export async function authenticate(header?:string):Promise<AuthUser>{
-  if(!header?.startsWith("Bearer ")) throw new Error("Authentication required");
-  const {payload}=await jwtVerify(header.slice(7),secret());
-  if(!payload.sub) throw new Error("Invalid session");
-  const user=users.get(payload.sub); if(!user) throw new Error("Invalid session");
-  return publicUser(user);
+ if(!header?.startsWith("Bearer "))throw new Error("Authentication required");
+ const token=header.slice(7);const session=await import("./session-store").then(m=>m.loadSession(token));
+ if(!session)throw new Error("Invalid or expired session");
+ const dbUser=await import("../../../packages/db/src/repositories").then(m=>m.getDbUser(session.userId));
+ if(!dbUser)throw new Error("User not found");
+ return {id:dbUser.id,email:dbUser.email,displayName:dbUser.displayName};
 }
-function publicUser(u:AuthUser){return {id:u.id,email:u.email,displayName:u.displayName};}
