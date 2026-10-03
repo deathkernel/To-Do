@@ -1,13 +1,18 @@
-# Batch 04 — Collaboration, Security, Data & Integrations
+# Batch 04 — Phases 10–12
 
-Covers features 17–22: Collaboration, Team/Business Workspace, Authentication & Security, Backup/Restore & Data, Sync & Offline Mode, and Integrations & Public API.
+## Offline & Sync
+- Offline mutation queue contract.
+- Operation IDs for idempotent sync.
+- Existing conflict/revision engine remains the server authority.
+- PWA foundation remains available.
 
-These are production-oriented domain/API foundations, not a claim that the production server, database, UI, queues, OAuth providers, or sync engine are complete.
+## Web UI
+- Existing workspace shell/API client is the base for task/project navigation.
+- Authenticated API client removes client-owned user IDs.
 
-## Cross-cutting rules
-- Every user-owned resource is user/tenant scoped.
-- Team resources require explicit membership and role authorization.
-- Sensitive operations are auditable.
-- External credentials are scoped and revocable.
-- Sync mutations are idempotent and conflict-aware.
-- Destructive restores require explicit authorization and audit logging.
+## Productivity
+- Productivity score calculation.
+- Goal progress/completion.
+- Focus-session timing primitives.
+
+The next UI pass should bind these primitives to IndexedDB, full module screens and persistent productivity APIs.
