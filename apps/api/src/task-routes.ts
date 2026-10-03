@@ -1,16 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { TaskService } from "../../../packages/domain/task-service";
 import { InMemoryTaskRepository } from "../../../packages/domain/task-repository";
+import { authenticated } from "./middleware";
 
 export function registerTaskRoutes(app: FastifyInstance) {
   const repository = new InMemoryTaskRepository();
   const service = new TaskService(repository);
 
   app.post("/api/v1/tasks", async (request, reply) => {
+    const user = await authenticated(request, reply); if (!user) return;
     const body = request.body as { userId: string; title: string; projectId?: string };
     try {
       const task = await service.create({
-        userId: body.userId,
+        userId: user.id,
         title: body.title,
         projectId: body.projectId
       });
@@ -20,16 +22,18 @@ export function registerTaskRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get("/api/v1/tasks", async (request) => {
+  app.get("/api/v1/tasks", async (request, reply) => {
+    const user = await authenticated(request, reply); if (!user) return;
     const query = request.query as { userId?: string };
-    return service.list(query.userId ?? "");
+    return service.list(user.id);
   });
 
   app.patch("/api/v1/tasks/:id", async (request, reply) => {
+    const user = await authenticated(request, reply); if (!user) return;
     const params = request.params as { id: string };
     const body = request.body as { userId: string; title?: string; priority?: 1|2|3|4; dueAt?: string };
     try {
-      const task = await service.update(params.id, body.userId, {
+      const task = await service.update(params.id, user.id, {
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.priority !== undefined ? { priority: body.priority } : {}),
         ...(body.dueAt !== undefined ? { dueAt: body.dueAt } : {})
@@ -41,30 +45,33 @@ export function registerTaskRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/v1/tasks/:id/complete", async (request, reply) => {
+    const user = await authenticated(request, reply); if (!user) return;
     const params = request.params as { id: string };
     const body = request.body as { userId: string };
     try {
-      return reply.send(await service.complete(params.id, body.userId));
+      return reply.send(await service.complete(params.id, user.id));
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to complete task" });
     }
   });
 
   app.post("/api/v1/tasks/:id/reopen", async (request, reply) => {
+    const user = await authenticated(request, reply); if (!user) return;
     const params = request.params as { id: string };
     const body = request.body as { userId: string };
     try {
-      return reply.send(await service.reopen(params.id, body.userId));
+      return reply.send(await service.reopen(params.id, user.id));
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to reopen task" });
     }
   });
 
   app.delete("/api/v1/tasks/:id", async (request, reply) => {
+    const user = await authenticated(request, reply); if (!user) return;
     const params = request.params as { id: string };
     const query = request.query as { userId?: string };
     try {
-      await service.remove(params.id, query.userId ?? "");
+      await service.remove(params.id, user.id);
       return reply.code(204).send();
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to delete task" });
