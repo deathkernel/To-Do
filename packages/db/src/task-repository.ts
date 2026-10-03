@@ -1,6 +1,6 @@
 import {and,eq} from "drizzle-orm";
-import {getDb,tasks} from "../index";
-import type {Task,TaskPriority,TaskStatus} from "../../../domain/task";
+import {getDb,tasks} from "./index";
+import type {Task,TaskPriority} from "../../domain/task";
 const pToDb=(p:TaskPriority)=>({P1:1,P2:2,P3:3,P4:4}[p]);
 const pFromDb=(p:number):TaskPriority=>p<=1?"P1":p===2?"P2":p===3?"P3":"P4";
 const map=(r:any):Task=>({...r,priority:pFromDb(r.priority),createdAt:r.createdAt.toISOString(),updatedAt:r.updatedAt.toISOString(),dueAt:r.dueAt?.toISOString()??null,deadlineAt:r.deadlineAt?.toISOString()??null,completedAt:r.completedAt?.toISOString()??null,deletedAt:r.deletedAt?.toISOString()??null,description:r.description??""});
