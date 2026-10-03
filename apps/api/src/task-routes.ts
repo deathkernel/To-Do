@@ -1,15 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { TaskService } from "../../../packages/domain/task-service";
-import { InMemoryTaskRepository } from "../../../packages/domain/task-repository";
+import { PostgresTaskRepository } from "../../../packages/db/src/task-repository";
 import { authenticated } from "./middleware";
 
 export function registerTaskRoutes(app: FastifyInstance) {
-  const repository = new InMemoryTaskRepository();
+  const repository = new PostgresTaskRepository();
   const service = new TaskService(repository);
 
   app.post("/api/v1/tasks", async (request, reply) => {
     const user = await authenticated(request, reply); if (!user) return;
-    const body = request.body as { userId: string; title: string; projectId?: string };
+    const body = request.body as { title: string; projectId?: string };
     try {
       const task = await service.create({
         userId: user.id,
@@ -31,7 +31,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
   app.patch("/api/v1/tasks/:id", async (request, reply) => {
     const user = await authenticated(request, reply); if (!user) return;
     const params = request.params as { id: string };
-    const body = request.body as { userId: string; title?: string; priority?: 1|2|3|4; dueAt?: string };
+    const body = request.body as { title?: string; priority?: "P1"|"P2"|"P3"|"P4"; dueAt?: string };
     try {
       const task = await service.update(params.id, user.id, {
         ...(body.title !== undefined ? { title: body.title } : {}),
@@ -47,7 +47,7 @@ export function registerTaskRoutes(app: FastifyInstance) {
   app.post("/api/v1/tasks/:id/complete", async (request, reply) => {
     const user = await authenticated(request, reply); if (!user) return;
     const params = request.params as { id: string };
-    const body = request.body as { userId: string };
+    const body = request.body as {};
     try {
       return reply.send(await service.complete(params.id, user.id));
     } catch (error) {
