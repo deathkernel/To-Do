@@ -24,3 +24,4 @@ export async function listAutomations(ownerId:string){return getDb().select().fr
 export async function insertApiToken(row:any){const rows=await getDb().insert(apiTokens).values(row).returning();return rows[0];}
 export async function listApiTokens(ownerId:string){return getDb().select().from(apiTokens).where(eq(apiTokens.ownerId,ownerId));}
 export async function findActiveApiToken(tokenHash:string){const rows=await getDb().select().from(apiTokens).where(and(eq(apiTokens.tokenHash,tokenHash),isNull(apiTokens.revokedAt)));return rows[0]??null;}
+export async function revokeApiToken(ownerId:string,id:string){const rows=await getDb().update(apiTokens).set({revokedAt:new Date()}).where(and(eq(apiTokens.id,id),eq(apiTokens.ownerId,ownerId),isNull(apiTokens.revokedAt))).returning({id:apiTokens.id});return Boolean(rows[0]);}
