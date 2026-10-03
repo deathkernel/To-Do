@@ -1,0 +1,2 @@
+import {describe,expect,it} from "vitest";import {OfflineMutationQueue} from "./offline";
+describe("offline queue",()=>it("keeps queued mutations until acknowledged",()=>{const q=new OfflineMutationQueue();q.enqueue({operationId:"1",resourceType:"task",resourceId:"t",mutation:{title:"x"},createdAt:"now",attempts:0});expect(q.peek()).toHaveLength(1);q.remove("1");expect(q.peek()).toHaveLength(0);}));
