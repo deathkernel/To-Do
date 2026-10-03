@@ -1,6 +1,7 @@
 import argon2 from "argon2";
 import crypto from "node:crypto";
-import {findUserByEmail,createUser,getDbUser} from "../../../packages/db/src/repositories";
+import {createHash} from "node:crypto";
+import {findUserByEmail,createUser,getDbUser,findActiveApiToken} from "../../../packages/db/src/repositories";
 import {persistSession,loadSession} from "./session-store";
 export type AuthUser={id:string,email:string,displayName:string};
 export async function register(email:string,password:string,displayName:string){
@@ -24,6 +25,7 @@ export async function authenticate(header?:string):Promise<AuthUser>{
  if(!header?.startsWith("Bearer "))throw new Error("Authentication required");
  const token=header.slice(7);
  if(!token||token.length>512)throw new Error("Invalid session token");
+ if(token.startsWith("td_")){const apiToken=await findActiveApiToken(createHash("sha256").update(token).digest("hex"));if(!apiToken)throw new Error("Invalid or revoked API token");const dbUser=await getDbUser(apiToken.ownerId);if(!dbUser)throw new Error("User not found");return {id:dbUser.id,email:dbUser.email,displayName:dbUser.displayName};}
  const session=await loadSession(token);
  if(!session)throw new Error("Invalid or expired session");
  const dbUser=await getDbUser(session.userId);
