@@ -31,7 +31,7 @@ function filtered(){
   else if(state.view==="project")a=a.filter(t=>t.projectId===state.projectId);
   else if(state.view!=="search")a=a.filter(t=>t.status!=="completed");
   if(!state.query)return a;
-  const terms=state.query.toLowerCase().split(/\\s+/).filter(Boolean);
+  const terms=state.query.toLowerCase().split(/\s+/).filter(Boolean);
   return a.filter(t=>terms.every(term=>{
     const text=(t.title+" "+(t.description||"")).toLowerCase();
     if(term.startsWith("@"))return (t.labelIds||[]).some(id=>state.labels.some(l=>l.id===id&&l.name.toLowerCase()===term.slice(1)));
