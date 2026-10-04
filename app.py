@@ -468,11 +468,10 @@ def section_create(u,pid):
         pid=uid(pid)
         if not project_can_mutate(u["id"],pid):return bad("Section permission denied",403)
         name=str(body().get("name","")).strip()
-        if not name:return bad("Section name is required")
-        r=fetch_one("INSERT INTO sections(id,project_id,name,position) VALUES(%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),pid,name,0));return jsonify({"id":r["id"],"projectId":r["project_id"],"name":r["name"],"position":r["position"]}),201
+        if not 1<=len(name)<=200:raise ValueError("Section name must be 1-200 characters")
+        r=fetch_one("INSERT INTO sections(id,project_id,name,position) VALUES(%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),pid,name,0))
+        return jsonify({"id":r["id"],"projectId":r["project_id"],"name":r["name"],"position":r["position"]}),201
     except ValueError as e:return bad(str(e))
-
-
 @app.patch("/api/v1/projects/<pid>/sections/<sid>")
 @require("projects:write")
 def section_update_nested(u,pid,sid):
@@ -755,8 +754,10 @@ def reminder_create(u):
     try:
         b=body();tid=uid(b["taskId"])
         if not task_access(u["id"],tid,"editor"):return bad("Task not found",404)
-        r=fetch_one("INSERT INTO reminders(id,user_id,task_id,trigger,trigger_at,minutes_before,location_id,recurring_rule,enabled) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],tid,str(b.get("trigger","time")),dt(b.get("triggerAt")),b.get("minutesBefore"),b.get("locationId"),b.get("recurringRule"),bool(b.get("enabled",True))));return jsonify({"id":r["id"],"taskId":r["task_id"],"trigger":r["trigger"],"triggerAt":iso(r["trigger_at"]),"minutesBefore":r["minutes_before"],"enabled":r["enabled"]}),201
-    except ValueError as e:return bad(str(e))
+        trigger,trigger_at,minutes,location,recurring,enabled=validate_reminder_payload(b)
+        r=fetch_one("INSERT INTO reminders(id,user_id,task_id,trigger,trigger_at,minutes_before,location_id,recurring_rule,enabled) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],tid,trigger,trigger_at,minutes,location,recurring,enabled))
+        return jsonify({"id":r["id"],"taskId":r["task_id"],"trigger":r["trigger"],"triggerAt":iso(r["trigger_at"]),"minutesBefore":r["minutes_before"],"enabled":r["enabled"]}),201
+    except (ValueError,KeyError) as e:return bad(str(e))
 @app.delete("/api/v1/reminders/<rid>")
 @require("reminders:write")
 def reminder_delete(u,rid):
@@ -834,10 +835,10 @@ def reminder_update(u,rid):
     try:
         rid=uid(rid);r=fetch_one("SELECT * FROM reminders WHERE id=%s AND user_id=%s",(rid,u["id"]))
         if not r:return bad("Reminder not found",404)
-        b=body();out=fetch_one("UPDATE reminders SET trigger=%s,trigger_at=%s,minutes_before=%s,location_id=%s,recurring_rule=%s,enabled=%s WHERE id=%s RETURNING *",(str(b.get("trigger",r["trigger"])),dt(b.get("triggerAt",iso(r["trigger_at"]))),b.get("minutesBefore",r["minutes_before"]),b.get("locationId",r["location_id"]),b.get("recurringRule",r["recurring_rule"]),bool(b.get("enabled",r["enabled"])),rid))
+        trigger,trigger_at,minutes,location,recurring,enabled=validate_reminder_payload(body(),r)
+        out=fetch_one("UPDATE reminders SET trigger=%s,trigger_at=%s,minutes_before=%s,location_id=%s,recurring_rule=%s,enabled=%s WHERE id=%s RETURNING *",(trigger,trigger_at,minutes,location,recurring,enabled,rid))
         return jsonify({"id":out["id"],"taskId":out["task_id"],"trigger":out["trigger"],"triggerAt":iso(out["trigger_at"]),"minutesBefore":out["minutes_before"],"enabled":out["enabled"]})
     except ValueError as e:return bad(str(e))
-
 @app.post("/api/v1/reminders/<rid>/snooze")
 @require("reminders:write")
 def reminder_snooze(u,rid):
