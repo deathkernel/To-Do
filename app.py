@@ -317,11 +317,16 @@ def verify_email(u):
 @app.post("/api/v1/auth/password-reset/request")
 @limited("reset",10,600)
 def reset_request():
-    email=str(body().get("email","")).strip().lower();r=fetch_one("SELECT id FROM users WHERE email=%s",(email,));out={"sent":True}
-    if r:
-        raw=tok("reset");execute("INSERT INTO password_reset_tokens(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",(str(uuid.uuid4()),r["id"],sh(raw),now()+timedelta(hours=1)))
-        if os.getenv("APP_ENV","development")!="production":out["developmentResetToken"]=raw
-    return jsonify(out)
+    try:
+        email=str(body().get("email","")).strip().lower();out={"sent":True}
+        if "@" not in email or len(email)>320:return jsonify(out)
+        r=fetch_one("SELECT id FROM users WHERE email=%s",(email,))
+        if r:
+            raw=tok("reset");execute("INSERT INTO password_reset_tokens(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",(str(uuid.uuid4()),r["id"],sh(raw),now()+timedelta(hours=1)))
+            if os.getenv("APP_ENV","development")!="production":out["developmentResetToken"]=raw
+        return jsonify(out)
+    except ValueError as e:return bad(str(e))
+    except Exception:return bad("Password reset service unavailable",503)
 @app.post("/api/v1/auth/password-reset")
 @limited("reset-apply",10,600)
 def reset_apply():
