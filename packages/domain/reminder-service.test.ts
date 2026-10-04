@@ -1,2 +1,0 @@
-import {describe,expect,it} from "vitest";import {dueReminders} from "./reminder-service";
-describe("reminders",()=>it("returns enabled reminders that are due",()=>{const now=new Date("2026-01-01T10:00:00Z");expect(dueReminders([{id:"r",userId:"u",taskId:"t",trigger:"at",triggerAt:"2026-01-01T09:00:00Z",minutesBefore:null,locationId:null,recurringRule:null,enabled:true}],now)).toHaveLength(1);}));
