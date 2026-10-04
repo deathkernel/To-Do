@@ -22,6 +22,14 @@ SCOPES={"tasks:read","tasks:write","projects:read","projects:write","labels:read
 ROLE={"viewer":10,"commenter":20,"editor":30,"manager":40,"owner":50};WROLE={"guest":10,"member":20,"admin":40,"owner":50}
 
 def now(): return datetime.now(timezone.utc)
+def parse_bool(v,default=False):
+    if v is None:return default
+    if isinstance(v,bool):return v
+    if isinstance(v,int) and v in (0,1):return bool(v)
+    text=str(v).strip().lower()
+    if text in ("true","1","yes","on"):return True
+    if text in ("false","0","no","off"):return False
+    raise ValueError("Invalid boolean value")
 def iso(v): return v.isoformat() if isinstance(v,datetime) else v
 def bad(msg,code=400): return jsonify({"error":msg}),code
 def body():
@@ -161,7 +169,7 @@ def validate_automation_payload(b,owner_id,existing=None):
             try:lid=uid(action.get("labelId"))
             except ValueError as e:raise ValueError("add_label action requires a valid labelId") from e
             if not fetch_one("SELECT id FROM labels WHERE id=%s AND user_id=%s",(lid,owner_id)):raise ValueError("Automation label must belong to the owner")
-    return name,trigger,conditions,actions,bool(b.get("enabled",existing["enabled"] if existing else True))
+    return name,trigger,conditions,actions,parse_bool(b.get("enabled"),existing["enabled"] if existing else True)
 def parse_quick_add(text):
     v=text.strip();p="P4";labels=[]
     m=re.search(r"(?:^|\s)(p[1-4])(?:\s|$)",v,re.I)
@@ -438,7 +446,7 @@ def project_create(u):
         wid=uid(b["workspaceId"]) if b.get("workspaceId") else None;parent=uid(b["parentId"]) if b.get("parentId") else None
         if wid and not fetch_one("SELECT 1 FROM workspace_members WHERE workspace_id=%s AND user_id=%s",(wid,u["id"])):return bad("Workspace not found",404)
         if parent and not project_access(u["id"],parent,"manager"):return bad("Parent project not accessible",403)
-        pid=str(uuid.uuid4());r=fetch_one("INSERT INTO projects(id,user_id,workspace_id,parent_id,name,description,color,icon,favorite,archived,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",(pid,u["id"],wid,parent,name,b.get("description"),b.get("color"),b.get("icon"),bool(b.get("favorite",False)),bool(b.get("archived",False)),int(b.get("position",0))));return jsonify(project_json(r)),201
+        pid=str(uuid.uuid4());r=fetch_one("INSERT INTO projects(id,user_id,workspace_id,parent_id,name,description,color,icon,favorite,archived,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",(pid,u["id"],wid,parent,name,b.get("description"),b.get("color"),b.get("icon"),parse_bool(b.get("favorite"),False),parse_bool(b.get("archived"),False),int(b.get("position",0))));return jsonify(project_json(r)),201
     except ValueError as e:return bad(str(e))
 @app.patch("/api/v1/projects/<pid>")
 @require("projects:write")
@@ -450,7 +458,7 @@ def project_update(u,pid):
         if not r:return bad("Project not found",404)
         b=body();name=str(b.get("name",r["name"])).strip()
         if not 1<=len(name)<=200:raise ValueError("Project name must be 1-200 characters")
-        r=fetch_one("UPDATE projects SET name=%s,description=%s,color=%s,icon=%s,favorite=%s,archived=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(name,b.get("description",r["description"]),b.get("color",r["color"]),b.get("icon",r["icon"]),bool(b.get("favorite",r["favorite"])),bool(b.get("archived",r["archived"])),int(b.get("position",r["position"])),now(),pid));return jsonify(project_json(r))
+        r=fetch_one("UPDATE projects SET name=%s,description=%s,color=%s,icon=%s,favorite=%s,archived=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(name,b.get("description",r["description"]),b.get("color",r["color"]),b.get("icon",r["icon"]),parse_bool(b.get("favorite"),r["favorite"]),parse_bool(b.get("archived"),r["archived"]),int(b.get("position",r["position"])),now(),pid));return jsonify(project_json(r))
     except ValueError as e:return bad(str(e))
 @app.delete("/api/v1/projects/<pid>")
 @require("projects:write")
@@ -687,7 +695,7 @@ def label_create(u):
     try:
         b=body();name=str(b.get("name","")).strip()
         if not 1<=len(name)<=100:raise ValueError("Label name must be 1-100 characters")
-        return jsonify(label_json(fetch_one("INSERT INTO labels(id,user_id,name,color,description,favorite) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],name,b.get("color"),b.get("description"),bool(b.get("favorite",False))))),),201
+        return jsonify(label_json(fetch_one("INSERT INTO labels(id,user_id,name,color,description,favorite) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],name,b.get("color"),b.get("description"),parse_bool(b.get("favorite"),False)))),),201
     except ValueError as e:return bad(str(e))
 @app.patch("/api/v1/labels/<lid>")
 @require("labels:write")
@@ -697,7 +705,7 @@ def label_update(u,lid):
         if not r:return bad("Label not found",404)
         b=body();name=str(b.get("name",r["name"])).strip()
         if not 1<=len(name)<=100:raise ValueError("Label name must be 1-100 characters")
-        r=fetch_one("UPDATE labels SET name=%s,color=%s,description=%s,favorite=%s,updated_at=%s WHERE id=%s AND user_id=%s RETURNING *",(name,b.get("color",r["color"]),b.get("description",r["description"]),bool(b.get("favorite",r["favorite"])),now(),lid,u["id"]));return jsonify(label_json(r))
+        r=fetch_one("UPDATE labels SET name=%s,color=%s,description=%s,favorite=%s,updated_at=%s WHERE id=%s AND user_id=%s RETURNING *",(name,b.get("color",r["color"]),b.get("description",r["description"]),parse_bool(b.get("favorite"),r["favorite"]),now(),lid,u["id"]));return jsonify(label_json(r))
     except ValueError as e:return bad(str(e))
 @app.delete("/api/v1/labels/<lid>")
 @require("labels:write")
