@@ -193,13 +193,15 @@ def record_sync(user_id,op_id,kind,rid,mutation):
     execute("INSERT INTO sync_operations(operation_id,user_id,revision,resource_type,resource_id,mutation_json) VALUES(%s,%s,%s,%s,%s,%s)",(op_id,user_id,rev,kind,rid,j(mutation)))
 
 def set_labels(uid_user,task_id,ids):
+    if ids is None: ids=[]
+    if not isinstance(ids,list): raise ValueError("labelIds must be a list")
     execute("DELETE FROM task_labels WHERE task_id=%s",(task_id,))
-    for lid in ids or []:
+    for lid in ids:
         try:lid=uid(lid)
         except ValueError:continue
         if fetch_one("SELECT id FROM labels WHERE id=%s AND user_id=%s",(lid,uid_user)):execute("INSERT INTO task_labels(task_id,label_id) VALUES(%s,%s) ON CONFLICT DO NOTHING",(task_id,lid))
-def insert_task(user,task,labels=None):
-    tid=str(uuid.uuid4());t=now()
+def insert_task(user,task,labels=None,tid=None):
+    tid=str(tid or uuid.uuid4());t=now()
     with get_conn() as c:
         with c.cursor() as cur:
             cur.execute("""INSERT INTO tasks(id,user_id,workspace_id,parent_task_id,project_id,section_id,assignee_id,title,description,priority,status,start_at,due_at,deadline_at,duration_minutes,timezone,recurrence,position,created_at,updated_at)
@@ -207,22 +209,22 @@ def insert_task(user,task,labels=None):
                         (tid,user["id"],task["workspaceId"],task["parentTaskId"],task["projectId"],task["sectionId"],task["assigneeId"],task["title"],task["description"],task["priority"],task["startAt"],task["dueAt"],task["deadlineAt"],task["durationMinutes"],task["timezone"],task["recurrence"],task["position"],t,t))
             row=cur.fetchone()
     set_labels(user["id"],tid,labels);activity(user["id"],"create","task",tid);record_sync(user["id"],tok("op"),"task",tid,{"action":"create","data":task_json(row)});trigger_automation("task_created",row);return row
-def change_task(user_id,tid,status):
+def change_task(user_id,tid,status,run_automation=True):
     row=task_access(user_id,tid,"editor")
     if not row:return None
     t=now();out=fetch_one("UPDATE tasks SET status=%s,completed_at=%s,deleted_at=%s,updated_at=%s WHERE id=%s RETURNING *",(status,t if status=="completed" else None,t if status=="deleted" else None,t,tid))
     activity(user_id,status,"task",tid);record_sync(user_id,tok("op"),"task",tid,{"action":status})
-    if status=="completed":trigger_automation("task_completed",out)
+    if status=="completed" and run_automation:trigger_automation("task_completed",out)
     return out
 def trigger_automation(event,row):
     try:
-        rules=fetch_all("SELECT * FROM automation_rules WHERE enabled=true AND trigger=%s",(event,))
+            rules=fetch_all("SELECT * FROM automation_rules WHERE enabled=true AND trigger=%s AND owner_id=%s",(event,row["user_id"]))
         for r in rules:
             try:
                 cond=pj(r["conditions"],{})
                 if cond.get("priority") and ("P"+str(row["priority"]))!=cond["priority"]:continue
                 for a in pj(r["actions"],[]):
-                    if a.get("type")=="complete_task":change_task(r["owner_id"],row["id"],"completed")
+                    if a.get("type")=="complete_task":change_task(r["owner_id"],row["id"],"completed",run_automation=False)
                     elif a.get("type")=="add_label" and a.get("labelId"):set_labels(r["owner_id"],row["id"],[a["labelId"]])
                 execute("INSERT INTO automation_executions(id,rule_id,status) VALUES(%s,%s,'success')",(str(uuid.uuid4()),r["id"]))
             except Exception as e:execute("INSERT INTO automation_executions(id,rule_id,status,error) VALUES(%s,%s,'failed',%s)",(str(uuid.uuid4()),r["id"],str(e)[:500]))
