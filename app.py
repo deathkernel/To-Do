@@ -404,6 +404,75 @@ def section_create(u,pid):
         r=fetch_one("INSERT INTO sections(id,project_id,name,position) VALUES(%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),pid,name,0));return jsonify({"id":r["id"],"projectId":r["project_id"],"name":r["name"],"position":r["position"]}),201
     except ValueError as e:return bad(str(e))
 
+
+@app.patch("/api/v1/projects/<pid>/sections/<sid>")
+@require("projects:write")
+def section_update_nested(u,pid,sid):
+    try:
+        pid,sid=uid(pid),uid(sid)
+        if not project_can_mutate(u["id"],pid): return bad("Section permission denied",403)
+        r=fetch_one("SELECT * FROM sections WHERE id=%s AND project_id=%s",(sid,pid))
+        if not r:return bad("Section not found",404)
+        b=body();name=str(b.get("name",r["name"])).strip()
+        if not name:return bad("Section name is required")
+        r=fetch_one("UPDATE sections SET name=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(name,int(b.get("position",r["position"])),now(),sid))
+        return jsonify({"id":r["id"],"projectId":r["project_id"],"name":r["name"],"position":r["position"]})
+    except ValueError as e:return bad(str(e))
+
+@app.patch("/api/v1/sections/<sid>")
+@require("projects:write")
+def section_update(u,sid):
+    try:
+        sid=uid(sid);r=fetch_one("SELECT project_id FROM sections WHERE id=%s",(sid,))
+        if not r:return bad("Section not found",404)
+        if not project_can_mutate(u["id"],r["project_id"]):return bad("Section permission denied",403)
+        b=body();out=fetch_one("UPDATE sections SET name=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name","")).strip(),int(b.get("position",0)),now(),sid))
+        return jsonify({"id":out["id"],"projectId":out["project_id"],"name":out["name"],"position":out["position"]})
+    except ValueError as e:return bad(str(e))
+
+@app.delete("/api/v1/sections/<sid>")
+@require("projects:write")
+def section_delete(u,sid):
+    try:
+        sid=uid(sid);r=fetch_one("SELECT project_id FROM sections WHERE id=%s",(sid,))
+        if not r:return bad("Section not found",404)
+        if not project_can_mutate(u["id"],r["project_id"]):return bad("Section permission denied",403)
+        execute("DELETE FROM sections WHERE id=%s",(sid,));return "",204
+    except ValueError as e:return bad(str(e))
+
+@app.get("/api/v1/projects/<pid>/members")
+@require("projects:read")
+def project_member_list(u,pid):
+    try:
+        pid=uid(pid)
+        if not project_access(u["id"],pid):return bad("Project not found",404)
+        rows=fetch_all("SELECT pm.user_id,pm.role,u.email,u.display_name FROM project_members pm JOIN users u ON u.id=pm.user_id WHERE pm.project_id=%s ORDER BY u.display_name",(pid,))
+        return jsonify([{"userId":r["user_id"],"role":r["role"],"email":r["email"],"displayName":r["display_name"]} for r in rows])
+    except ValueError as e:return bad(str(e))
+
+@app.post("/api/v1/projects/<pid>/members")
+@require("projects:write")
+def project_member_add(u,pid):
+    try:
+        pid=uid(pid)
+        if not project_can_mutate(u["id"],pid,"manager"):return bad("Manager permission required",403)
+        b=body();target=fetch_one("SELECT id FROM users WHERE email=%s",(str(b.get("email","")).strip().lower(),))
+        if not target:return bad("User not found",404)
+        role=str(b.get("role","viewer"))
+        if role not in ("viewer","commenter","editor","manager"):return bad("Invalid role")
+        execute("INSERT INTO project_members(project_id,user_id,role) VALUES(%s,%s,%s) ON CONFLICT(project_id,user_id) DO UPDATE SET role=EXCLUDED.role",(pid,target["id"],role))
+        return jsonify({"projectId":pid,"userId":target["id"],"role":role}),201
+    except ValueError as e:return bad(str(e))
+
+@app.delete("/api/v1/projects/<pid>/members/<member_id>")
+@require("projects:write")
+def project_member_remove(u,pid,member_id):
+    try:
+        pid,member_id=uid(pid),uid(member_id)
+        if not project_can_mutate(u["id"],pid,"manager"):return bad("Manager permission required",403)
+        execute("DELETE FROM project_members WHERE project_id=%s AND user_id=%s",(pid,member_id));return "",204
+    except ValueError as e:return bad(str(e))
+
 @app.get("/api/v1/tasks")
 @require("tasks:read")
 def tasks(u):
@@ -612,6 +681,28 @@ def reminder_delete(u,rid):
     try:execute("DELETE FROM reminders WHERE id=%s AND user_id=%s",(uid(rid),u["id"]));return "",204
     except ValueError as e:return bad(str(e))
 
+
+@app.patch("/api/v1/comments/<cid>")
+@require("comments:write")
+def comment_update(u,cid):
+    try:
+        cid=uid(cid);r=fetch_one("SELECT * FROM comments WHERE id=%s AND user_id=%s",(cid,u["id"]))
+        if not r:return bad("Comment not found",404)
+        text=str(body().get("body","")).strip()
+        if not text:return bad("Comment body is required")
+        out=fetch_one("UPDATE comments SET body=%s,updated_at=%s WHERE id=%s RETURNING *",(text,now(),cid))
+        return jsonify({"id":out["id"],"taskId":out["task_id"],"userId":out["user_id"],"body":out["body"],"createdAt":iso(out["created_at"]),"updatedAt":iso(out["updated_at"])})
+    except ValueError as e:return bad(str(e))
+
+@app.delete("/api/v1/comments/<cid>")
+@require("comments:write")
+def comment_delete(u,cid):
+    try:
+        cid=uid(cid)
+        if not fetch_one("DELETE FROM comments WHERE id=%s AND user_id=%s RETURNING id",(cid,u["id"])):return bad("Comment not found",404)
+        return "",204
+    except ValueError as e:return bad(str(e))
+
 @app.get("/api/v1/comments/<tid>")
 @require("comments:read")
 def comments(u,tid):
@@ -652,6 +743,38 @@ def attachment_download(u,aid):
         path=UPLOAD_ROOT/r["storage_key"]
         if not path.exists():return bad("Attachment content missing",404)
         return send_file(path,as_attachment=True,download_name=r["name"])
+    except ValueError as e:return bad(str(e))
+
+
+@app.patch("/api/v1/reminders/<rid>")
+@require("reminders:write")
+def reminder_update(u,rid):
+    try:
+        rid=uid(rid);r=fetch_one("SELECT * FROM reminders WHERE id=%s AND user_id=%s",(rid,u["id"]))
+        if not r:return bad("Reminder not found",404)
+        b=body();out=fetch_one("UPDATE reminders SET trigger=%s,trigger_at=%s,minutes_before=%s,location_id=%s,recurring_rule=%s,enabled=%s WHERE id=%s RETURNING *",(str(b.get("trigger",r["trigger"])),dt(b.get("triggerAt",iso(r["trigger_at"]))),b.get("minutesBefore",r["minutes_before"]),b.get("locationId",r["location_id"]),b.get("recurringRule",r["recurring_rule"]),bool(b.get("enabled",r["enabled"])),rid))
+        return jsonify({"id":out["id"],"taskId":out["task_id"],"trigger":out["trigger"],"triggerAt":iso(out["trigger_at"]),"minutesBefore":out["minutes_before"],"enabled":out["enabled"]})
+    except ValueError as e:return bad(str(e))
+
+@app.post("/api/v1/reminders/<rid>/snooze")
+@require("reminders:write")
+def reminder_snooze(u,rid):
+    try:
+        rid=uid(rid);r=fetch_one("SELECT id FROM reminders WHERE id=%s AND user_id=%s",(rid,u["id"]))
+        if not r:return bad("Reminder not found",404)
+        minutes=max(1,min(10080,int(body().get("minutes",15))))
+        out=fetch_one("UPDATE reminders SET trigger_at=%s,enabled=true WHERE id=%s RETURNING *",(now()+timedelta(minutes=minutes),rid))
+        return jsonify({"id":out["id"],"triggerAt":iso(out["trigger_at"])})
+    except ValueError as e:return bad(str(e))
+
+@app.patch("/api/v1/goals/<gid>")
+@require("goals:write")
+def goal_update_alias(u,gid):
+    try:
+        gid=uid(gid);r=fetch_one("SELECT * FROM goals WHERE id=%s AND user_id=%s",(gid,u["id"]))
+        if not r:return bad("Goal not found",404)
+        b=body();out=fetch_one("UPDATE goals SET name=%s,target=%s,current=%s,period=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name",r["name"])).strip(),max(1,int(b.get("target",r["target"]))),max(0,int(b.get("current",r["current"]))),str(b.get("period",r["period"])),now(),gid))
+        return jsonify({"id":out["id"],"name":out["name"],"target":out["target"],"current":out["current"],"period":out["period"],"projectId":out["project_id"]})
     except ValueError as e:return bad(str(e))
 
 @app.get("/api/v1/goals")
@@ -732,6 +855,35 @@ def automation_update(u,aid):
         b=body();r=fetch_one("UPDATE automation_rules SET name=%s,trigger=%s,conditions=%s,actions=%s,enabled=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name",r["name"])),str(b.get("trigger",r["trigger"])),j(b.get("conditions",pj(r["conditions"],{}))),j(b.get("actions",pj(r["actions"],[]))),bool(b.get("enabled",r["enabled"])),now(),aid));return jsonify({"id":r["id"],"name":r["name"],"trigger":r["trigger"],"conditions":pj(r["conditions"],{}),"actions":pj(r["actions"],[]),"enabled":r["enabled"]})
     except ValueError as e:return bad(str(e))
 
+
+@app.patch("/api/v1/templates/<tid>")
+@require("templates:write")
+def template_update(u,tid):
+    try:
+        tid=uid(tid);r=fetch_one("SELECT * FROM templates WHERE id=%s AND owner_id=%s",(tid,u["id"]))
+        if not r:return bad("Template not found",404)
+        b=body();out=fetch_one("UPDATE templates SET name=%s,description=%s,scope=%s,visibility=%s,version=version+1,content_json=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name",r["name"])).strip(),b.get("description",r["description"]),str(b.get("scope",r["scope"])),str(b.get("visibility",r["visibility"])),j(b.get("content",pj(r["content_json"],{}))),now(),tid))
+        return jsonify({"id":out["id"],"name":out["name"],"version":out["version"],"content":pj(out["content_json"],{})})
+    except ValueError as e:return bad(str(e))
+
+@app.delete("/api/v1/templates/<tid>")
+@require("templates:write")
+def template_delete(u,tid):
+    try:
+        if not fetch_one("DELETE FROM templates WHERE id=%s AND owner_id=%s RETURNING id",(uid(tid),u["id"])):return bad("Template not found",404)
+        return "",204
+    except ValueError as e:return bad(str(e))
+
+@app.post("/api/v1/templates/<tid>/duplicate")
+@require("templates:write")
+def template_duplicate(u,tid):
+    try:
+        r=fetch_one("SELECT * FROM templates WHERE id=%s AND owner_id=%s",(uid(tid),u["id"]))
+        if not r:return bad("Template not found",404)
+        out=fetch_one("INSERT INTO templates(id,owner_id,name,description,scope,visibility,content_json) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],r["name"]+" (copy)",r["description"],r["scope"],"private",r["content_json"]))
+        return jsonify({"id":out["id"],"name":out["name"],"content":pj(out["content_json"],{})}),201
+    except ValueError as e:return bad(str(e))
+
 @app.get("/api/v1/api-tokens")
 @require("tasks:read")
 def api_tokens(u):return jsonify([{"id":r["id"],"name":r["name"],"scopes":pj(r["scopes"],[]),"createdAt":iso(r["created_at"]),"revokedAt":iso(r["revoked_at"])} for r in fetch_all("SELECT * FROM api_tokens WHERE owner_id=%s ORDER BY created_at DESC",(u["id"],))])
@@ -770,6 +922,59 @@ def backup_export(u):
         result[table]=rows
     return jsonify(result)
 
+
+@app.get("/api/v1/sync/pull")
+@require("sync:read")
+def sync_pull(u):
+    try:
+        cursor=max(0,int(request.args.get("cursor","0")))
+        rows=fetch_all("SELECT * FROM sync_operations WHERE user_id=%s AND revision>%s ORDER BY revision LIMIT 500",(u["id"],cursor))
+        return jsonify({"operations":[{"operationId":r["operation_id"],"revision":r["revision"],"resourceType":r["resource_type"],"resourceId":r["resource_id"],"mutation":pj(r["mutation_json"],{})} for r in rows],"nextCursor":rows[-1]["revision"] if rows else cursor})
+    except ValueError as e:return bad(str(e))
+
+@app.post("/api/v1/sync/push")
+@require("sync:write")
+def sync_push(u):
+    try:
+        ops=body().get("operations",[])
+        if not isinstance(ops,list) or len(ops)>500:raise ValueError("operations must contain 0-500 items")
+        results=[]
+        for op in ops:
+            op_id=str(op.get("operationId","")).strip()
+            if not op_id:raise ValueError("operationId is required")
+            rid=uid(op.get("resourceId"));kind=str(op.get("resourceType",""));mutation=op.get("mutation") or {}
+            existing=fetch_one("SELECT revision FROM sync_operations WHERE operation_id=%s AND user_id=%s",(op_id,u["id"]))
+            if existing:
+                results.append({"operationId":op_id,"status":"accepted","revision":existing["revision"]});continue
+            if kind=="task":
+                current=task_access(u["id"],rid,"editor")
+                action=mutation.get("action")
+                if current and action=="delete":change_task(u["id"],rid,"deleted")
+                elif current and action=="complete":change_task(u["id"],rid,"completed")
+                elif current and action=="reopen":change_task(u["id"],rid,"active")
+                elif current and action=="update":
+                    data=validate_task(u["id"],mutation.get("data",{}),current)
+                    execute("UPDATE tasks SET title=%s,description=%s,priority=%s,project_id=%s,section_id=%s,start_at=%s,due_at=%s,deadline_at=%s,duration_minutes=%s,timezone=%s,recurrence=%s,updated_at=%s WHERE id=%s",(data["title"],data["description"],data["priority"],data["projectId"],data["sectionId"],data["startAt"],data["dueAt"],data["deadlineAt"],data["durationMinutes"],data["timezone"],data["recurrence"],rid))
+            rev_before=fetch_one("SELECT revision FROM sync_state WHERE user_id=%s",(u["id"],))
+            record_sync(u["id"],op_id,kind,rid,mutation)
+            rev=fetch_one("SELECT revision FROM sync_state WHERE user_id=%s",(u["id"],))["revision"]
+            results.append({"operationId":op_id,"status":"accepted","revision":rev})
+        return jsonify({"results":results})
+    except ValueError as e:return bad(str(e))
+
+@app.post("/api/v1/backup/import")
+@require("tasks:write")
+def backup_import(u):
+    try:
+        b=body();projects_map={};count=0
+        for p in b.get("projects",[]):
+            pid=str(uuid.uuid4());projects_map[str(p.get("id"))]=pid
+            execute("INSERT INTO projects(id,user_id,name,description,color,icon,favorite,archived,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pid,u["id"],str(p.get("name","Imported project"))[:200],p.get("description"),p.get("color"),p.get("icon"),bool(p.get("favorite",False)),bool(p.get("archived",False)),int(p.get("position",0))));count+=1
+        for t in b.get("tasks",[]):
+            execute("INSERT INTO tasks(id,user_id,project_id,title,description,priority,status,due_at,deadline_at,duration_minutes,recurrence,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",(str(uuid.uuid4()),u["id"],projects_map.get(str(t.get("project_id") or t.get("projectId"))),str(t.get("title","Imported task"))[:500],t.get("description"),int(t.get("priority",4)),str(t.get("status","active")),dt(t.get("due_at") or t.get("dueAt")),dt(t.get("deadline_at") or t.get("deadlineAt")),t.get("duration_minutes") or t.get("durationMinutes"),t.get("recurrence"),str(t.get("position","a0"))));count+=1
+        return jsonify({"imported":count})
+    except (ValueError,KeyError,TypeError) as e:return bad("Invalid backup: "+str(e))
+
 @app.post("/api/v1/ai/quick-add")
 @require("tasks:write")
 def ai_quick_add(u):
@@ -785,6 +990,51 @@ def ai_quick_add(u):
 @require("tasks:read")
 def activity_feed(u):
     rows=fetch_all("SELECT * FROM activity_log WHERE user_id=%s ORDER BY created_at DESC LIMIT 200",(u["id"],));return jsonify([{"id":r["id"],"action":r["action"],"resourceType":r["resource_type"],"resourceId":r["resource_id"],"details":pj(r["details"],{}),"createdAt":iso(r["created_at"])} for r in rows])
+
+
+@app.post("/api/v1/ai/breakdown")
+@require("tasks:write")
+def ai_breakdown(u):
+    b=body();title=str(b.get("title","")).strip()
+    if not title:return bad("title is required")
+    base=os.getenv("AI_BASE_URL");key=os.getenv("AI_API_KEY");model=os.getenv("AI_MODEL")
+    if not base or not key or not model:return bad("AI provider is not configured",503)
+    payload=json.dumps({"model":model,"messages":[{"role":"system","content":"Return 3-7 concrete subtasks as a JSON array."},{"role":"user","content":title}]}).encode()
+    try:
+        req=urlrequest.Request(base.rstrip("/")+"/chat/completions",data=payload,headers={"Content-Type":"application/json","Authorization":"Bearer "+key},method="POST")
+        with urlrequest.urlopen(req,timeout=30) as r:return jsonify({"result":json.loads(r.read().decode())["choices"][0]["message"]["content"]})
+    except Exception as e:return bad("AI request failed: %s"%e,503)
+
+@app.post("/api/v1/ai/rewrite")
+@require("tasks:write")
+def ai_rewrite(u):
+    b=body();text=str(b.get("text","")).strip()
+    if not text:return bad("text is required")
+    base=os.getenv("AI_BASE_URL");key=os.getenv("AI_API_KEY");model=os.getenv("AI_MODEL")
+    if not base or not key or not model:return bad("AI provider is not configured",503)
+    payload=json.dumps({"model":model,"messages":[{"role":"system","content":"Rewrite task text clearly and concisely."},{"role":"user","content":text}]}).encode()
+    try:
+        req=urlrequest.Request(base.rstrip("/")+"/chat/completions",data=payload,headers={"Content-Type":"application/json","Authorization":"Bearer "+key},method="POST")
+        with urlrequest.urlopen(req,timeout=30) as r:return jsonify({"result":json.loads(r.read().decode())["choices"][0]["message"]["content"]})
+    except Exception as e:return bad("AI request failed: %s"%e,503)
+
+@app.get("/api/v1/devices")
+@require("tasks:read")
+def device_list(u):
+    return jsonify([{"id":r["id"],"platform":r["platform"],"name":r["name"],"lastSeenAt":iso(r["last_seen_at"]),"revokedAt":iso(r["revoked_at"])} for r in fetch_all("SELECT * FROM devices WHERE user_id=%s ORDER BY last_seen_at DESC",(u["id"],))])
+
+@app.post("/api/v1/devices")
+@require("devices:write")
+def device_register(u):
+    b=body();r=fetch_one("INSERT INTO devices(id,user_id,platform,name,push_token) VALUES(%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],str(b.get("platform","web"))[:32],str(b.get("name","browser"))[:120],b.get("pushToken")))
+    return jsonify({"id":r["id"],"platform":r["platform"],"name":r["name"],"lastSeenAt":iso(r["last_seen_at"])}),201
+
+@app.get("/api/v1/activity")
+@require("tasks:read")
+def activity_feed(u):
+    rows=fetch_all("SELECT * FROM activity_log WHERE user_id=%s ORDER BY created_at DESC LIMIT 200",(u["id"],))
+    return jsonify([{"id":r["id"],"action":r["action"],"resourceType":r["resource_type"],"resourceId":r["resource_id"],"details":pj(r["details"],{}),"createdAt":iso(r["created_at"])} for r in rows])
+
 
 @app.errorhandler(413)
 def too_large(_):return bad("Uploaded file is too large",413)
