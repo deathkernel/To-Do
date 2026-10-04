@@ -446,7 +446,7 @@ def workspaces(u):
 @require("workspaces:write")
 def workspace_create(u):
     name=str(body().get("name","")).strip()
-    if not name:return bad("Workspace name is required")
+    if not 1<=len(name)<=200:raise ValueError("Workspace name must be 1-200 characters")
     wid=str(uuid.uuid4());execute("INSERT INTO workspaces(id,owner_id,name) VALUES(%s,%s,%s)",(wid,u["id"],name));execute("INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,'owner')",(wid,u["id"]));return jsonify({"id":wid,"ownerId":u["id"],"name":name,"role":"owner"}),201
 @app.get("/api/v1/workspaces/<wid>/members")
 @require("workspaces:read")
@@ -873,7 +873,7 @@ def comment_create(u,tid):
     try:
         tid=uid(tid);txt=str(body().get("body","")).strip()
         if not task_access(u["id"],tid,"commenter"):return bad("Comment permission denied",403)
-        if not txt:raise ValueError("Comment body is required")
+        if not 1<=len(txt)<=10000:raise ValueError("Comment body must be 1-10000 characters")
         r=fetch_one("INSERT INTO comments(id,task_id,user_id,body) VALUES(%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),tid,u["id"],txt));activity(u["id"],"comment","task",tid);return jsonify({"id":r["id"],"taskId":r["task_id"],"userId":r["user_id"],"body":r["body"],"createdAt":iso(r["created_at"])}),201
     except ValueError as e:return bad(str(e))
 
