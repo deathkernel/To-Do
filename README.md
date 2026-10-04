@@ -1,61 +1,57 @@
 # To-Do
 
-A productivity workspace built with **Python, Flask, PostgreSQL, Redis, HTML5, CSS3 and vanilla JavaScript**.
+A Todoist-style productivity workspace built on **Python, Flask, PostgreSQL, Redis, HTML5, CSS3 and vanilla JavaScript**.
 
 ## Canonical stack
 
 - Python + Flask: application server and REST API
-- PostgreSQL 17: persistent storage
-- Redis 7: infrastructure for cache/jobs
-- HTML5: application shell
-- CSS3: responsive visual system and themes
-- Vanilla JavaScript: browser state, API calls and interactions
-- Docker Compose: local database infrastructure
-
-The canonical app is served from one Python process. There is no frontend build step.
+- PostgreSQL 17: durable application storage
+- Redis 7: rate limiting and background-work infrastructure
+- HTML5/CSS3/vanilla JavaScript: web application
+- Docker Compose: local and containerized runtime
+- No React, TypeScript, Vite, Node.js or pnpm in the canonical application
 
 ## Run locally
 
-Start PostgreSQL and Redis:
+Start infrastructure:
 
-    docker compose up -d
+    docker compose up -d postgres redis
 
-Create a virtual environment:
+Create and activate the environment:
 
     python -m venv .venv
 
-Activate it on Windows:
+Windows:
 
-    .venvScriptsactivate
+    .venv\Scripts\activate
 
 Install dependencies:
 
     pip install -r requirements.txt
 
-Start the app:
+Start the web app:
 
-    python app.py
+    python -u app.py
 
 Open:
 
     http://127.0.0.1:3000
 
-The application initializes the PostgreSQL schema automatically.
+Run the worker in a second terminal:
 
-## Environment
+    python worker.py
 
-Copy .env.example to .env when custom settings are needed.
+## Runtime coverage
 
-Development defaults:
+The Python runtime currently includes authenticated tasks and projects, nested tasks and projects, labels, dependencies, bulk task actions, search and saved filters, reminders and in-app notifications, comments, local attachments, goals and analytics, calendar/time blocks, templates, backup export/import, synchronization records, automations, device registration, scoped API tokens, TOTP MFA, password recovery/verification tokens, rate limiting, a PWA shell, and an OpenAI-compatible AI boundary.
 
-    DATABASE_URL=postgresql://todo:todo_dev_only@localhost:5432/todo
-    REDIS_URL=redis://localhost:6379
-    HOST=127.0.0.1
-    PORT=3000
+## Provider-dependent integrations
 
-## Current backend surface
+OAuth/OIDC login, real email delivery, push credentials, external calendar synchronization, cloud object storage and native desktop/Android/iOS packages require external credentials or release infrastructure. They are kept behind explicit adapters rather than being represented as fake local integrations.
 
-Authentication and sessions, tasks, task lifecycle, projects, sections, labels, search, reminders, comments and scoped API tokens are implemented in Flask. The schema also retains workspaces, goals, automations, templates, devices, task labels, dependencies and synchronization tables for continued feature expansion.
+## Quality
+
+CI runs Python compilation and pytest against PostgreSQL and Redis service containers.
 
 ## Project layout
 
@@ -63,13 +59,11 @@ Authentication and sessions, tasks, task lifecycle, projects, sections, labels, 
     ├── app.py
     ├── db.py
     ├── schema.sql
+    ├── worker.py
     ├── requirements.txt
-    ├── templates/
-    │   └── index.html
-    ├── static/
-    │   ├── app.js
-    │   └── styles.css
+    ├── Dockerfile
     ├── docker-compose.yml
+    ├── templates/
+    ├── static/
+    ├── tests/
     └── docs/
-
-Historical architecture and product planning notes remain under docs/.
