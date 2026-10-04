@@ -39,6 +39,11 @@ def parse_bool(v,default=False):
     if text in ("false","0","no","off"):return False
     raise ValueError("Invalid boolean value")
 def iso(v): return v.isoformat() if isinstance(v,datetime) else v
+def validate_color(v,default=None):
+    if v in (None,""):return default
+    value=str(v).strip()
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}",value):raise ValueError("Color must be a 6-digit hex value")
+    return value
 def bad(msg,code=400): return jsonify({"error":msg}),code
 def body():
     x=request.get_json(silent=True)
