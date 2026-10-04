@@ -73,8 +73,13 @@ def project_json(r):
 def label_json(r):
     return {"id":r["id"],"userId":r["user_id"],"name":r["name"],"color":r["color"],"description":r["description"],"favorite":r["favorite"],"createdAt":iso(r["created_at"]),"updatedAt":iso(r["updated_at"])}
 
-def session_for(user_id):
-    raw=tok("ses");execute("INSERT INTO sessions(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",(str(uuid.uuid4()),user_id,sh(raw),now()+timedelta(days=int(os.getenv("SESSION_DAYS","30")))));return raw
+def session_for(user_id,conn=None):
+    raw=tok("ses");args=(str(uuid.uuid4()),user_id,sh(raw),now()+timedelta(days=int(os.getenv("SESSION_DAYS","30"))))
+    if conn:
+        with conn.cursor() as cur:cur.execute("INSERT INTO sessions(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",args)
+    else:
+        execute("INSERT INTO sessions(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",args)
+    return raw
 def current_user():
     h=request.headers.get("Authorization","")
     if not h.startswith("Bearer "):raise PermissionError("Authentication required")
@@ -284,16 +289,19 @@ def register():
         if "@" not in email or len(email)>320:raise ValueError("Valid email is required")
         if len(pw)<10:raise ValueError("Password must be at least 10 characters")
         if not name or len(name)>120:raise ValueError("Display name is required")
-        if fetch_one("SELECT id FROM users WHERE email=%s",(email,)):raise ValueError("Email already registered")
-        u=str(uuid.uuid4());execute("INSERT INTO users(id,email,display_name,password_hash) VALUES(%s,%s,%s,%s)",(u,email,name,ph.hash(pw)))
-        w=str(uuid.uuid4());execute("INSERT INTO workspaces(id,owner_id,name) VALUES(%s,%s,%s)",(w,u,name+"'s Workspace"));execute("INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,'owner')",(w,u))
-        vt=tok("verify");execute("INSERT INTO email_verification_tokens(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",(str(uuid.uuid4()),u,sh(vt),now()+timedelta(hours=24)))
-        out={"user":{"id":u,"email":email,"displayName":name},"token":session_for(u)}
+        with get_conn() as c:
+            with c.cursor() as cur:
+                cur.execute("SELECT id FROM users WHERE email=%s",(email,))
+                if cur.fetchone():raise ValueError("Email already registered")
+                uid_new=str(uuid.uuid4());cur.execute("INSERT INTO users(id,email,display_name,password_hash) VALUES(%s,%s,%s,%s)",(uid_new,email,name,ph.hash(pw)))
+                wid=str(uuid.uuid4());cur.execute("INSERT INTO workspaces(id,owner_id,name) VALUES(%s,%s,%s)",(wid,uid_new,name+"'s Workspace"));cur.execute("INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,'owner')",(wid,uid_new))
+                vt=tok("verify");cur.execute("INSERT INTO email_verification_tokens(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",(str(uuid.uuid4()),uid_new,sh(vt),now()+timedelta(hours=24)))
+                token=session_for(uid_new,c)
+        out={"user":{"id":uid_new,"email":email,"displayName":name},"token":token}
         if os.getenv("APP_ENV","development")!="production":out["developmentVerificationToken"]=vt
         return jsonify(out),201
     except ValueError as e:return bad(str(e))
     except Exception:return bad("Registration failed",500)
-
 @app.post("/api/v1/auth/login")
 @limited("login",15,300)
 def login():
