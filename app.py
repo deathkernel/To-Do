@@ -178,6 +178,20 @@ def validate_automation_payload(b,owner_id,existing=None):
             except ValueError as e:raise ValueError("add_label action requires a valid labelId") from e
             if not fetch_one("SELECT id FROM labels WHERE id=%s AND user_id=%s",(lid,owner_id)):raise ValueError("Automation label must belong to the owner")
     return name,trigger,conditions,actions,parse_bool(b.get("enabled"),existing["enabled"] if existing else True)
+def validate_template_payload(b,existing=None):
+    name=str(b.get("name",existing["name"] if existing else "Template")).strip()
+    if not 1<=len(name)<=200:raise ValueError("Template name must be 1-200 characters")
+    scope=str(b.get("scope",existing["scope"] if existing else "personal")).strip().lower()
+    visibility=str(b.get("visibility",existing["visibility"] if existing else "private")).strip().lower()
+    if scope not in ("personal","project","workspace"):raise ValueError("Invalid template scope")
+    if visibility not in ("private","shared"):raise ValueError("Invalid template visibility")
+    content=b.get("content",pj(existing["content_json"],{}) if existing else {})
+    if not isinstance(content,dict):raise ValueError("Template content must be an object")
+    tasks=content.get("tasks",[])
+    if not isinstance(tasks,list) or len(tasks)>500:raise ValueError("Template tasks must be a list of at most 500 items")
+    for item in tasks:
+        if not isinstance(item,dict):raise ValueError("Template task must be an object")
+    return name,scope,visibility,content
 def parse_quick_add(text):
     v=text.strip();p="P4";labels=[]
     m=re.search(r"(?:^|\s)(p[1-4])(?:\s|$)",v,re.I)
@@ -964,7 +978,11 @@ def templates(u):return jsonify([{"id":r["id"],"name":r["name"],"description":r[
 @app.post("/api/v1/templates")
 @require("templates:write")
 def template_create(u):
-    b=body();r=fetch_one("INSERT INTO templates(id,owner_id,name,description,scope,visibility,content_json) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],str(b.get("name","Template")),b.get("description"),str(b.get("scope","personal")),str(b.get("visibility","private")),j(b.get("content",{}))));return jsonify({"id":r["id"],"name":r["name"],"content":pj(r["content_json"],{})}),201
+    try:
+        b=body();name,scope,visibility,content=validate_template_payload(b)
+        r=fetch_one("INSERT INTO templates(id,owner_id,name,description,scope,visibility,content_json) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],name,b.get("description"),scope,visibility,j(content)))
+        return jsonify({"id":r["id"],"name":r["name"],"content":pj(r["content_json"],{})}),201
+    except ValueError as e:return bad(str(e))
 @app.post("/api/v1/templates/<tid>/apply")
 @require("templates:write")
 def template_apply(u,tid):
@@ -1009,10 +1027,10 @@ def template_update(u,tid):
     try:
         tid=uid(tid);r=fetch_one("SELECT * FROM templates WHERE id=%s AND owner_id=%s",(tid,u["id"]))
         if not r:return bad("Template not found",404)
-        b=body();out=fetch_one("UPDATE templates SET name=%s,description=%s,scope=%s,visibility=%s,version=version+1,content_json=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name",r["name"])).strip(),b.get("description",r["description"]),str(b.get("scope",r["scope"])),str(b.get("visibility",r["visibility"])),j(b.get("content",pj(r["content_json"],{}))),now(),tid))
+        name,scope,visibility,content=validate_template_payload(body(),r)
+        out=fetch_one("UPDATE templates SET name=%s,scope=%s,visibility=%s,version=version+1,content_json=%s,updated_at=%s WHERE id=%s RETURNING *",(name,scope,visibility,j(content),now(),tid))
         return jsonify({"id":out["id"],"name":out["name"],"version":out["version"],"content":pj(out["content_json"],{})})
     except ValueError as e:return bad(str(e))
-
 @app.delete("/api/v1/templates/<tid>")
 @require("templates:write")
 def template_delete(u,tid):
@@ -1050,7 +1068,7 @@ def api_token_delete(u,tid):
 
 @app.get("/api/v1/notifications")
 @require("tasks:read")
-def notifications(u):return jsonify([{"id":r["id"],"title":r["title"],"body":r["body"],"channel":r["channel"],"read":r["read"],"createdAt":iso(r["created_at"])} for r in fetch_all("SELECT * FROM notifications WHERE user_id=%s ORDER BY created_at DESC LIMIT 100",(u["id"],))])
+def notifications(u):return jsonify([{"id":r["id"],"taskId":r.get("task_id"),"title":r["title"],"body":r["body"],"channel":r["channel"],"read":r["read"],"createdAt":iso(r["created_at"])} for r in fetch_all("SELECT * FROM notifications WHERE user_id=%s ORDER BY created_at DESC LIMIT 100",(u["id"],))])
 @app.post("/api/v1/notifications/<nid>/read")
 @require("tasks:write")
 def notification_read(u,nid):
