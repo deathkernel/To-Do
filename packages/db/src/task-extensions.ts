@@ -1,5 +1,0 @@
-import {and,eq} from "drizzle-orm";
-import {getDb,tasks} from "./index";
-export async function moveTask(userId:string,taskId:string,projectId:string|null,sectionId:string|null){const rows=await getDb().update(tasks).set({projectId,sectionId,updatedAt:new Date()}).where(and(eq(tasks.id,taskId),eq(tasks.userId,userId))).returning();if(!rows[0])throw new Error("Task not found");return rows[0];}
-export async function bulkCompleteTasks(userId:string,taskIds:string[]){if(!taskIds.length)return 0;let count=0;for(const id of taskIds){const rows=await getDb().update(tasks).set({status:"completed",completedAt:new Date(),updatedAt:new Date()}).where(and(eq(tasks.id,id),eq(tasks.userId,userId))).returning({id:tasks.id});count+=rows.length;}return count;}
-export async function bulkDeleteTasks(userId:string,taskIds:string[]){if(!taskIds.length)return 0;let count=0;for(const id of taskIds){const rows=await getDb().update(tasks).set({status:"deleted",deletedAt:new Date(),updatedAt:new Date()}).where(and(eq(tasks.id,id),eq(tasks.userId,userId))).returning({id:tasks.id});count+=rows.length;}return count;}
