@@ -217,8 +217,9 @@ def validate_task(uid_user,p,existing=None):
     b={}
     current_id=str(existing["id"]) if existing and existing.get("id") else None
     if existing:b={"title":existing["title"],"description":existing["description"] or "","priority":"P"+str(existing["priority"]),"projectId":existing["project_id"],"sectionId":existing["section_id"],"parentTaskId":existing["parent_task_id"],"assigneeId":existing.get("assignee_id"),"workspaceId":existing.get("workspace_id"),"startAt":iso(existing.get("start_at")),"dueAt":iso(existing["due_at"]),"deadlineAt":iso(existing["deadline_at"]),"durationMinutes":existing["duration_minutes"],"timezone":existing.get("timezone"),"recurrence":existing["recurrence"],"position":existing["position"]}
-    d={**b,**p};title=str(d.get("title","")).strip();priority=str(d.get("priority","P4")).upper()
+    d={**b,**p};title=str(d.get("title","")).strip();priority=str(d.get("priority","P4")).upper();description=str(d.get("description",""))
     if not 1<=len(title)<=500:raise ValueError("Task title must be 1-500 characters")
+    if len(description)>10000:raise ValueError("Task description must be <=10000 characters")
     if priority not in ("P1","P2","P3","P4"):raise ValueError("Invalid priority")
     pid=uid(d["projectId"]) if d.get("projectId") else None;sid=uid(d["sectionId"]) if d.get("sectionId") else None;parent=uid(d["parentTaskId"]) if d.get("parentTaskId") else None;assignee=uid(d["assigneeId"]) if d.get("assigneeId") else None;wid=uid(d["workspaceId"]) if d.get("workspaceId") else None
     if pid:
@@ -254,7 +255,7 @@ def validate_task(uid_user,p,existing=None):
         elif not pid and not wid and str(assignee)!=str(uid_user):raise ValueError("Assignee requires a shared project or workspace")
     dur=d.get("durationMinutes")
     if dur is not None and (isinstance(dur,bool) or not isinstance(dur,int) or dur<0 or dur>1440):raise ValueError("Invalid duration")
-    return {"title":title,"description":str(d.get("description","")),"priority":int(priority[1]),"projectId":pid,"sectionId":sid,"parentTaskId":parent,"assigneeId":assignee,"workspaceId":wid,"startAt":dt(d.get("startAt")),"dueAt":dt(d.get("dueAt")),"deadlineAt":dt(d.get("deadlineAt")),"durationMinutes":dur,"timezone":str(d.get("timezone") or "UTC"),"recurrence":d.get("recurrence"),"position":str(d.get("position") or "a0")}
+    return {"title":title,"description":description,"priority":int(priority[1]),"projectId":pid,"sectionId":sid,"parentTaskId":parent,"assigneeId":assignee,"workspaceId":wid,"startAt":dt(d.get("startAt")),"dueAt":dt(d.get("dueAt")),"deadlineAt":dt(d.get("deadlineAt")),"durationMinutes":dur,"timezone":str(d.get("timezone") or "UTC"),"recurrence":d.get("recurrence"),"position":str(d.get("position") or "a0")}
 def record_sync(user_id,op_id,kind,rid,mutation):
     with get_conn() as c:
         with c.cursor() as cur:
