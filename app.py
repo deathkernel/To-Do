@@ -871,9 +871,15 @@ def goal_update(u,gid):
     try:
         gid=uid(gid);r=fetch_one("SELECT * FROM goals WHERE id=%s AND user_id=%s",(gid,u["id"]))
         if not r:return bad("Goal not found",404)
-        b=body();r=fetch_one("UPDATE goals SET name=%s,target=%s,current=%s,period=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name",r["name"])).strip(),max(1,int(b.get("target",r["target"]))),max(0,int(b.get("current",r["current"]))),str(b.get("period",r["period"])),now(),gid));return jsonify({"id":r["id"],"name":r["name"],"target":r["target"],"current":r["current"],"period":r["period"],"projectId":r["project_id"]})
-    except ValueError as e:return bad(str(e))
-
+        data=body();name=str(data.get("name",r["name"])).strip()
+        if not 1<=len(name)<=200:raise ValueError("Goal name must be 1-200 characters")
+        target=data.get("target",r["target"]);current=data.get("current",r["current"]);period=str(data.get("period",r["period"])).strip().lower()
+        if isinstance(target,bool) or isinstance(current,bool):raise ValueError("Goal target/current must be integers")
+        target=max(1,int(target));current=max(0,int(current))
+        if period not in ("daily","weekly","monthly"):raise ValueError("Invalid goal period")
+        out=fetch_one("UPDATE goals SET name=%s,target=%s,current=%s,period=%s,updated_at=%s WHERE id=%s RETURNING *",(name,target,current,period,now(),gid))
+        return jsonify({"id":out["id"],"name":out["name"],"target":out["target"],"current":out["current"],"period":out["period"],"projectId":out["project_id"]})
+    except (ValueError,TypeError) as e:return bad(str(e))
 @app.get("/api/v1/analytics/overview")
 @require("analytics:read")
 def analytics(u):
@@ -926,16 +932,21 @@ def automations(u):return jsonify([{"id":r["id"],"name":r["name"],"trigger":r["t
 @app.post("/api/v1/automations")
 @require("automations:write")
 def automation_create(u):
-    b=body();r=fetch_one("INSERT INTO automation_rules(id,owner_id,name,trigger,conditions,actions,enabled) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],str(b.get("name","Automation")),str(b.get("trigger","task_created")),j(b.get("conditions",{})),j(b.get("actions",[])),bool(b.get("enabled",True))));return jsonify({"id":r["id"],"name":r["name"],"trigger":r["trigger"],"conditions":pj(r["conditions"],{}),"actions":pj(r["actions"],[]),"enabled":r["enabled"]}),201
+    try:
+        b=body();name,trigger,conditions,actions,enabled=validate_automation_payload(b,u["id"])
+        r=fetch_one("INSERT INTO automation_rules(id,owner_id,name,trigger,conditions,actions,enabled) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],name,trigger,j(conditions),j(actions),enabled))
+        return jsonify({"id":r["id"],"name":r["name"],"trigger":r["trigger"],"conditions":pj(r["conditions"],{}),"actions":pj(r["actions"],[]),"enabled":r["enabled"]}),201
+    except ValueError as e:return bad(str(e))
 @app.patch("/api/v1/automations/<aid>")
 @require("automations:write")
 def automation_update(u,aid):
     try:
         aid=uid(aid);r=fetch_one("SELECT * FROM automation_rules WHERE id=%s AND owner_id=%s",(aid,u["id"]))
         if not r:return bad("Automation not found",404)
-        b=body();r=fetch_one("UPDATE automation_rules SET name=%s,trigger=%s,conditions=%s,actions=%s,enabled=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name",r["name"])),str(b.get("trigger",r["trigger"])),j(b.get("conditions",pj(r["conditions"],{}))),j(b.get("actions",pj(r["actions"],[]))),bool(b.get("enabled",r["enabled"])),now(),aid));return jsonify({"id":r["id"],"name":r["name"],"trigger":r["trigger"],"conditions":pj(r["conditions"],{}),"actions":pj(r["actions"],[]),"enabled":r["enabled"]})
+        name,trigger,conditions,actions,enabled=validate_automation_payload(body(),u["id"],r)
+        out=fetch_one("UPDATE automation_rules SET name=%s,trigger=%s,conditions=%s,actions=%s,enabled=%s,updated_at=%s WHERE id=%s RETURNING *",(name,trigger,j(conditions),j(actions),enabled,now(),aid))
+        return jsonify({"id":out["id"],"name":out["name"],"trigger":out["trigger"],"conditions":pj(out["conditions"],{}),"actions":pj(out["actions"],[]),"enabled":out["enabled"]})
     except ValueError as e:return bad(str(e))
-
 
 @app.patch("/api/v1/templates/<tid>")
 @require("templates:write")
