@@ -18,6 +18,14 @@ app=Flask(__name__,static_folder="static");app.config["MAX_CONTENT_LENGTH"]=int(
 @app.get("/favicon.ico")
 def favicon(): return send_from_directory(ROOT/"static","favicon.svg",mimetype="image/svg+xml")
 ph=PasswordHasher()
+@app.after_request
+def security_headers(response):
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]="geolocation=(),microphone=(),camera=()"
+    if os.getenv("APP_ENV","development")=="production":response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
+    return response
 SCOPES={"tasks:read","tasks:write","projects:read","projects:write","labels:read","labels:write","comments:read","comments:write","reminders:read","reminders:write","sync:read","sync:write","workspaces:read","workspaces:write","attachments:read","attachments:write","goals:read","goals:write","templates:read","templates:write","automations:read","automations:write","analytics:read","devices:write"}
 ROLE={"viewer":10,"commenter":20,"editor":30,"manager":40,"owner":50};WROLE={"guest":10,"member":20,"admin":40,"owner":50}
 
@@ -209,6 +217,10 @@ def validate_task(uid_user,p,existing=None):
         if project and project.get("workspace_id"):wid=str(project["workspace_id"])
     if parent:
         if current_id and str(parent)==current_id:raise ValueError("Task cannot be its own parent")
+        parent_row=task_access(uid_user,parent)
+        if not parent_row:raise ValueError("Parent task not accessible")
+        if pid and parent_row.get("project_id") and str(parent_row["project_id"])!=str(pid):raise ValueError("Parent task must belong to the same project")
+        if wid and parent_row.get("workspace_id") and str(parent_row["workspace_id"])!=str(wid):raise ValueError("Parent task must belong to the same workspace")
         cur=str(parent);seen=set()
         for _ in range(101):
             if cur in seen:raise ValueError("Task parent cycle detected")
@@ -217,7 +229,6 @@ def validate_task(uid_user,p,existing=None):
             if not node or not node.get("parent_task_id"):break
             cur=str(node["parent_task_id"])
             if current_id and cur==current_id:raise ValueError("Task parent cycle detected")
-        if not task_access(uid_user,parent):raise ValueError("Parent task not accessible")
     if assignee:
         if pid and not project_access(assignee,pid):raise ValueError("Assignee is not eligible")
         elif wid and not fetch_one("SELECT 1 FROM workspace_members WHERE workspace_id=%s AND user_id=%s",(wid,assignee)):raise ValueError("Assignee is not a workspace member")
@@ -379,7 +390,7 @@ def reset_apply():
         if len(pw)<10:raise ValueError("Password must be at least 10 characters")
         r=fetch_one("SELECT user_id FROM password_reset_tokens WHERE token_hash=%s AND expires_at>%s",(sh(str(b.get("token",""))),now()))
         if not r:return bad("Invalid or expired reset token")
-        execute("UPDATE users SET password_hash=%s,updated_at=%s WHERE id=%s",(ph.hash(pw),now(),r["user_id"]));execute("UPDATE sessions SET revoked_at=%s WHERE user_id=%s AND revoked_at IS NULL",(now(),r["user_id"]));execute("DELETE FROM password_reset_tokens WHERE user_id=%s",(r["user_id"],));return jsonify({"reset":True})
+        execute("UPDATE users SET password_hash=%s,updated_at=%s WHERE id=%s",(ph.hash(pw),now(),r["user_id"]));execute("UPDATE sessions SET revoked_at=%s WHERE user_id=%s AND revoked_at IS NULL",(now(),r["user_id"]));execute("UPDATE api_tokens SET revoked_at=%s WHERE owner_id=%s AND revoked_at IS NULL",(now(),r["user_id"]));execute("DELETE FROM password_reset_tokens WHERE user_id=%s",(r["user_id"],));return jsonify({"reset":True})
     except ValueError as e:return bad(str(e))
 @app.post("/api/v1/auth/mfa/setup")
 @require("tasks:write")
@@ -396,7 +407,16 @@ def mfa_confirm(u):
     execute("UPDATE users SET mfa_enabled=true,updated_at=%s WHERE id=%s",(now(),u["id"]));return jsonify({"enabled":True})
 @app.post("/api/v1/auth/mfa/disable")
 @require("tasks:write")
-def mfa_disable(u):execute("UPDATE users SET mfa_enabled=false,mfa_secret=NULL,updated_at=%s WHERE id=%s",(now(),u["id"]));return jsonify({"enabled":False})
+def mfa_disable(u):
+    try:
+        password=str(body().get("password",""))
+        if not password:raise ValueError("Current password is required to disable MFA")
+        r=fetch_one("SELECT password_hash FROM users WHERE id=%s",(u["id"],))
+        if not r or not r["password_hash"] or not ph.verify(r["password_hash"],password):return bad("Invalid current password",401)
+        execute("UPDATE users SET mfa_enabled=false,mfa_secret=NULL,updated_at=%s WHERE id=%s",(now(),u["id"]))
+        return jsonify({"enabled":False})
+    except ValueError as e:return bad(str(e))
+    except Exception:return bad("Unable to disable MFA",503)
 
 @app.get("/api/v1/workspaces")
 @require("workspaces:read")
@@ -445,7 +465,11 @@ def project_create(u):
         if not 1<=len(name)<=200:raise ValueError("Project name must be 1-200 characters")
         wid=uid(b["workspaceId"]) if b.get("workspaceId") else None;parent=uid(b["parentId"]) if b.get("parentId") else None
         if wid and not fetch_one("SELECT 1 FROM workspace_members WHERE workspace_id=%s AND user_id=%s",(wid,u["id"])):return bad("Workspace not found",404)
-        if parent and not project_access(u["id"],parent,"manager"):return bad("Parent project not accessible",403)
+        if parent:
+            pp=project_access(u["id"],parent,"manager")
+            if not pp:return bad("Parent project not accessible",403)
+            if wid and pp.get("workspace_id") and str(pp["workspace_id"])!=str(wid):return bad("Parent project must belong to the same workspace",400)
+            if not wid and pp.get("workspace_id"):wid=str(pp["workspace_id"])
         pid=str(uuid.uuid4());r=fetch_one("INSERT INTO projects(id,user_id,workspace_id,parent_id,name,description,color,icon,favorite,archived,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",(pid,u["id"],wid,parent,name,b.get("description"),b.get("color"),b.get("icon"),parse_bool(b.get("favorite"),False),parse_bool(b.get("archived"),False),int(b.get("position",0))));return jsonify(project_json(r)),201
     except ValueError as e:return bad(str(e))
 @app.patch("/api/v1/projects/<pid>")
@@ -922,6 +946,16 @@ def time_block_create(u):
         if task_id and not task_access(u["id"],task_id):return bad("Task not found",404)
         if fetch_one("SELECT id FROM time_blocks WHERE user_id=%s AND start_at<%s AND end_at>%s LIMIT 1",(u["id"],end,start)):return bad("Time block conflict",409)
         r=fetch_one("INSERT INTO time_blocks(id,user_id,task_id,start_at,end_at,notes) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],task_id,start,end,b.get("notes")));return jsonify({"id":r["id"],"taskId":r["task_id"],"startAt":iso(r["start_at"]),"endAt":iso(r["end_at"]),"notes":r["notes"]}),201
+    except ValueError as e:return bad(str(e))
+
+@app.get("/api/v1/automations/<aid>/executions")
+@require("automations:read")
+def automation_executions(u,aid):
+    try:
+        aid=uid(aid);r=fetch_one("SELECT id FROM automation_rules WHERE id=%s AND owner_id=%s",(aid,u["id"]))
+        if not r:return bad("Automation not found",404)
+        rows=fetch_all("SELECT id,status,error,created_at FROM automation_executions WHERE rule_id=%s ORDER BY created_at DESC LIMIT 200",(aid,))
+        return jsonify([{"id":x["id"],"status":x["status"],"error":x["error"],"createdAt":iso(x["created_at"])} for x in rows])
     except ValueError as e:return bad(str(e))
 
 @app.get("/api/v1/templates")
