@@ -490,7 +490,7 @@ def project_create(u):
             if not pp:return bad("Parent project not accessible",403)
             if wid and pp.get("workspace_id") and str(pp["workspace_id"])!=str(wid):return bad("Parent project must belong to the same workspace",400)
             if not wid and pp.get("workspace_id"):wid=str(pp["workspace_id"])
-        pid=str(uuid.uuid4());r=fetch_one("INSERT INTO projects(id,user_id,workspace_id,parent_id,name,description,color,icon,favorite,archived,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",(pid,u["id"],wid,parent,name,b.get("description"),b.get("color"),b.get("icon"),parse_bool(b.get("favorite"),False),parse_bool(b.get("archived"),False),int(b.get("position",0))));return jsonify(project_json(r)),201
+        pid=str(uuid.uuid4());r=fetch_one("INSERT INTO projects(id,user_id,workspace_id,parent_id,name,description,color,icon,favorite,archived,position) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",(pid,u["id"],wid,parent,name,b.get("description"),validate_color(b.get("color"),None),b.get("icon"),parse_bool(b.get("favorite"),False),parse_bool(b.get("archived"),False),int(b.get("position",0))));return jsonify(project_json(r)),201
     except ValueError as e:return bad(str(e))
 @app.patch("/api/v1/projects/<pid>")
 @require("projects:write")
@@ -502,7 +502,7 @@ def project_update(u,pid):
         if not r:return bad("Project not found",404)
         b=body();name=str(b.get("name",r["name"])).strip()
         if not 1<=len(name)<=200:raise ValueError("Project name must be 1-200 characters")
-        r=fetch_one("UPDATE projects SET name=%s,description=%s,color=%s,icon=%s,favorite=%s,archived=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(name,b.get("description",r["description"]),b.get("color",r["color"]),b.get("icon",r["icon"]),parse_bool(b.get("favorite"),r["favorite"]),parse_bool(b.get("archived"),r["archived"]),int(b.get("position",r["position"])),now(),pid));return jsonify(project_json(r))
+        r=fetch_one("UPDATE projects SET name=%s,description=%s,color=%s,icon=%s,favorite=%s,archived=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(name,b.get("description",r["description"]),validate_color(b.get("color",r["color"]),r["color"]),b.get("icon",r["icon"]),parse_bool(b.get("favorite"),r["favorite"]),parse_bool(b.get("archived"),r["archived"]),int(b.get("position",r["position"])),now(),pid));return jsonify(project_json(r))
     except ValueError as e:return bad(str(e))
 @app.delete("/api/v1/projects/<pid>")
 @require("projects:write")
