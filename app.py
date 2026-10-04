@@ -340,7 +340,10 @@ def reset_apply():
 @app.post("/api/v1/auth/mfa/setup")
 @require("tasks:write")
 def mfa_setup(u):
-    secret=pyotp.random_base32();execute("UPDATE users SET mfa_secret=%s,updated_at=%s WHERE id=%s",(secret,now(),u["id"]));return jsonify({"secret":secret,"otpauth":pyotp.TOTP(secret).provisioning_uri(u["email"],issuer_name=os.getenv("APP_NAME","To-Do"))})
+    current=fetch_one("SELECT mfa_enabled,mfa_secret FROM users WHERE id=%s",(u["id"],))
+    if current and current["mfa_enabled"]:return bad("MFA is already enabled; disable it before generating a new secret",409)
+    secret=pyotp.random_base32();execute("UPDATE users SET mfa_secret=%s,updated_at=%s WHERE id=%s",(secret,now(),u["id"]))
+    return jsonify({"secret":secret,"otpauth":pyotp.TOTP(secret).provisioning_uri(u["email"],issuer_name=os.getenv("APP_NAME","To-Do"))})
 @app.post("/api/v1/auth/mfa/confirm")
 @require("tasks:write")
 def mfa_confirm(u):
