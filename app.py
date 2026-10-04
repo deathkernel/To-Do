@@ -218,7 +218,7 @@ def change_task(user_id,tid,status,run_automation=True):
     return out
 def trigger_automation(event,row):
     try:
-            rules=fetch_all("SELECT * FROM automation_rules WHERE enabled=true AND trigger=%s AND owner_id=%s",(event,row["user_id"]))
+        rules=fetch_all("SELECT * FROM automation_rules WHERE enabled=true AND trigger=%s AND owner_id=%s",(event,row["user_id"]))
         for r in rules:
             try:
                 cond=pj(r["conditions"],{})
