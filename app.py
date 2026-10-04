@@ -83,7 +83,7 @@ def limited(prefix,limit=20,seconds=60):
 def user_json(r):
     return {"id":r["id"],"email":r["email"],"displayName":r["display_name"],"emailVerified":bool(r.get("email_verified",False)),"mfaEnabled":bool(r.get("mfa_enabled",False))}
 def task_json(r):
-    return {"id":r["id"],"userId":r["user_id"],"workspaceId":r.get("workspace_id"),"parentTaskId":r["parent_task_id"],"projectId":r["project_id"],"sectionId":r["section_id"],"assigneeId":r.get("assignee_id"),"title":r["title"],"description":r["description"] or "","priority":"P"+str(r["priority"]),"status":r["status"],"startAt":iso(r.get("start_at")),"dueAt":iso(r["due_at"]),"deadlineAt":iso(r["deadline_at"]),"durationMinutes":r["duration_minutes"],"timezone":r.get("timezone") or "UTC","recurrence":r["recurrence"],"position":r["position"],"completedAt":iso(r["completed_at"]),"deletedAt":iso(r["deleted_at"]),"createdAt":iso(r["created_at"]),"updatedAt":iso(r["updated_at"])}
+    return {"id":r["id"],"userId":r["user_id"],"workspaceId":r.get("workspace_id"),"parentTaskId":r["parent_task_id"],"projectId":r["project_id"],"sectionId":r["section_id"],"assigneeId":r.get("assignee_id"),"title":r["title"],"description":r["description"] or "","priority":"P"+str(r["priority"]),"status":r["status"],"startAt":iso(r.get("start_at")),"dueAt":iso(r["due_at"]),"deadlineAt":iso(r["deadline_at"]),"durationMinutes":r["duration_minutes"],"timezone":r.get("timezone") or "UTC","recurrence":r["recurrence"],"position":r["position"],"labelIds":r.get("label_ids") or [],"completedAt":iso(r["completed_at"]),"deletedAt":iso(r["deleted_at"]),"createdAt":iso(r["created_at"]),"updatedAt":iso(r["updated_at"])}
 def project_json(r):
     return {"id":r["id"],"userId":r["user_id"],"workspaceId":r.get("workspace_id"),"parentId":r.get("parent_id"),"name":r["name"],"description":r["description"],"color":r["color"],"icon":r["icon"],"favorite":r["favorite"],"archived":r["archived"],"position":r["position"],"createdAt":iso(r["created_at"]),"updatedAt":iso(r["updated_at"])}
 def label_json(r):
@@ -613,7 +613,7 @@ def tasks(u):
         if due=="today":where.append("t.due_at::date=CURRENT_DATE")
         if due=="overdue":where.append("t.due_at IS NOT NULL AND t.due_at<%s AND t.status<>'completed'");params.append(now())
         if due=="upcoming":where.append("t.due_at>%s");params.append(now())
-        rows=fetch_all("SELECT t.* FROM tasks t WHERE "+" AND ".join(where)+" ORDER BY t.position,t.due_at NULLS LAST,t.created_at",tuple(params));return jsonify([task_json(r) for r in rows])
+        rows=fetch_all("SELECT t.*,COALESCE((SELECT json_agg(tl.label_id ORDER BY tl.label_id) FROM task_labels tl WHERE tl.task_id=t.id),'[]'::json) AS label_ids FROM tasks t WHERE "+" AND ".join(where)+" ORDER BY t.position,t.due_at NULLS LAST,t.created_at",tuple(params));return jsonify([task_json(r) for r in rows])
     except ValueError as e:return bad(str(e))
 @app.post("/api/v1/tasks")
 @require("tasks:write")
