@@ -921,11 +921,16 @@ def template_apply(u,tid):
     try:
         r=fetch_one("SELECT * FROM templates WHERE id=%s AND owner_id=%s",(uid(tid),u["id"]))
         if not r:return bad("Template not found",404)
+        content=pj(r["content_json"],{})
+        if not isinstance(content,dict):raise ValueError("Template content must be an object")
         made=[]
-        for item in pj(r["content_json"],{}).get("tasks",[]):made.append(insert_task(u,validate_task(u["id"],item),item.get("labelIds",[])))
+        for item in content.get("tasks",[]):
+            if not isinstance(item,dict):raise ValueError("Template task must be an object")
+            labels=item.get("labelIds",[])
+            if not isinstance(labels,list):raise ValueError("Template labelIds must be a list")
+            made.append(insert_task(u,validate_task(u["id"],item),labels))
         return jsonify({"applied":True,"taskCount":len(made),"tasks":[task_json(x) for x in made]})
     except ValueError as e:return bad(str(e))
-
 @app.get("/api/v1/automations")
 @require("automations:read")
 def automations(u):return jsonify([{"id":r["id"],"name":r["name"],"trigger":r["trigger"],"conditions":pj(r["conditions"],{}),"actions":pj(r["actions"],[]),"enabled":r["enabled"]} for r in fetch_all("SELECT * FROM automation_rules WHERE owner_id=%s ORDER BY created_at DESC",(u["id"],))])
