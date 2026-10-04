@@ -315,5 +315,13 @@ def api_token_delete(u,id):
     except ValueError as e:return bad(str(e))
 
 if __name__=="__main__":
-    init_db()
-    app.run(host=os.getenv("HOST","127.0.0.1"),port=int(os.getenv("PORT","3000")),debug=os.getenv("FLASK_DEBUG","0")=="1")
+    print("[To-Do] Starting Python application...",flush=True)
+    try:
+        init_db()
+    except Exception as exc:
+        print(f"[To-Do] Database startup failed: {exc}",flush=True)
+        raise SystemExit(1)
+    host=os.getenv("HOST","127.0.0.1")
+    port=int(os.getenv("PORT","3000"))
+    print(f"[To-Do] Open http://{host}:{port}",flush=True)
+    app.run(host=host,port=port,debug=os.getenv("FLASK_DEBUG","0")=="1")
