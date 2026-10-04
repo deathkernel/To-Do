@@ -588,9 +588,14 @@ def task_bulk(u):
                 out.append(fetch_one("UPDATE tasks SET priority=%s,updated_at=%s WHERE id=%s RETURNING *",(int(p[1]),now(),tid)))
             elif action=="move":
                 pid=uid(b["projectId"]) if b.get("projectId") else None
+                sid=uid(b["sectionId"]) if b.get("sectionId") else None
                 if pid and not project_access(u["id"],pid,"editor"):raise ValueError("Project not accessible")
-                out.append(fetch_one("UPDATE tasks SET project_id=%s,section_id=%s,updated_at=%s WHERE id=%s RETURNING *",(pid,uid(b["sectionId"]) if b.get("sectionId") else None,now(),tid)))
-            elif action=="label":set_labels(u["id"],tid,b.get("labelIds",[]));out.append(fetch_one("SELECT * FROM tasks WHERE id=%s",(tid,)))
+                if sid:
+                    sec=fetch_one("SELECT project_id FROM sections WHERE id=%s",(sid,))
+                    if not sec or (pid and str(sec["project_id"])!=str(pid)):raise ValueError("Section does not belong to project")
+                    pid=str(sec["project_id"])
+                    if not project_access(u["id"],pid,"editor"):raise ValueError("Section project not accessible")
+                out.append(fetch_one("UPDATE tasks SET project_id=%s,section_id=%s,updated_at=%s WHERE id=%s RETURNING *",(pid,sid,now(),tid)))
             else:raise ValueError("Unsupported bulk action")
         return jsonify({"updated":[task_json(x) for x in out if x]})
     except ValueError as e:return bad(str(e))
