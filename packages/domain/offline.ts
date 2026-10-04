@@ -1,3 +1,0 @@
-export interface OfflineMutation{operationId:string;resourceType:string;resourceId:string;mutation:Record<string,unknown>;createdAt:string;attempts:number;}
-export class OfflineMutationQueue{private items:OfflineMutation[]=[];enqueue(item:OfflineMutation){this.items.push(item)}peek(){return [...this.items]}remove(operationId:string){this.items=this.items.filter(x=>x.operationId!==operationId)}}
-export function createOperation(resourceType:string,resourceId:string,mutation:Record<string,unknown>):OfflineMutation{return {operationId:crypto.randomUUID(),resourceType,resourceId,mutation,createdAt:new Date().toISOString(),attempts:0};}
