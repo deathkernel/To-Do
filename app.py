@@ -814,9 +814,15 @@ def goals(u):return jsonify([{"id":r["id"],"name":r["name"],"target":r["target"]
 @app.post("/api/v1/goals")
 @require("goals:write")
 def goal_create(u):
-    b=body();name=str(b.get("name","")).strip()
-    if not name:return bad("Goal name is required")
-    r=fetch_one("INSERT INTO goals(id,user_id,project_id,name,target,current,period) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],uid(b["projectId"]) if b.get("projectId") else None,name,max(1,int(b.get("target",1))),max(0,int(b.get("current",0))),str(b.get("period","weekly"))));return jsonify({"id":r["id"],"name":r["name"],"target":r["target"],"current":r["current"],"period":r["period"],"projectId":r["project_id"]}),201
+    try:
+        b=body();name=str(b.get("name","")).strip()
+        if not 1<=len(name)<=200:raise ValueError("Goal name must be 1-200 characters")
+        pid=uid(b["projectId"]) if b.get("projectId") else None
+        if pid and not project_access(u["id"],pid,"viewer"):return bad("Project not accessible",403)
+        target=max(1,int(b.get("target",1)));current=max(0,int(b.get("current",0)))
+        r=fetch_one("INSERT INTO goals(id,user_id,project_id,name,target,current,period) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],pid,name,target,current,str(b.get("period","weekly"))))
+        return jsonify({"id":r["id"],"name":r["name"],"target":r["target"],"current":r["current"],"period":r["period"],"projectId":r["project_id"]}),201
+    except (ValueError,TypeError) as e:return bad(str(e))
 @app.patch("/api/v1/goals/<gid>")
 @require("goals:write")
 def goal_update(u,gid):
