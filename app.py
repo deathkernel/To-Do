@@ -979,27 +979,29 @@ def sync_push(u):
         results=[]
         for op in ops:
             op_id=str(op.get("operationId","")).strip()
-            if not op_id:raise ValueError("operationId is required")
+            if not op_id or len(op_id)>200:raise ValueError("operationId is required and must be <=200 characters")
             rid=uid(op.get("resourceId"));kind=str(op.get("resourceType",""));mutation=op.get("mutation") or {}
+            if kind!="task" or not isinstance(mutation,dict):raise ValueError("Only task sync operations are supported")
             existing=fetch_one("SELECT revision FROM sync_operations WHERE operation_id=%s AND user_id=%s",(op_id,u["id"]))
             if existing:
                 results.append({"operationId":op_id,"status":"accepted","revision":existing["revision"]});continue
-            if kind=="task":
-                current=task_access(u["id"],rid,"editor")
-                action=mutation.get("action")
-                if current and action=="delete":change_task(u["id"],rid,"deleted")
-                elif current and action=="complete":change_task(u["id"],rid,"completed")
-                elif current and action=="reopen":change_task(u["id"],rid,"active")
-                elif current and action=="update":
-                    data=validate_task(u["id"],mutation.get("data",{}),current)
-                    execute("UPDATE tasks SET title=%s,description=%s,priority=%s,project_id=%s,section_id=%s,start_at=%s,due_at=%s,deadline_at=%s,duration_minutes=%s,timezone=%s,recurrence=%s,updated_at=%s WHERE id=%s",(data["title"],data["description"],data["priority"],data["projectId"],data["sectionId"],data["startAt"],data["dueAt"],data["deadlineAt"],data["durationMinutes"],data["timezone"],data["recurrence"],rid))
-            rev_before=fetch_one("SELECT revision FROM sync_state WHERE user_id=%s",(u["id"],))
-            record_sync(u["id"],op_id,kind,rid,mutation)
+            current=task_access(u["id"],rid,"editor");action=mutation.get("action")
+            if action=="create" and not current:
+                data=validate_task(u["id"],mutation.get("data",{}))
+                insert_task(u,data,(mutation.get("data") or {}).get("labelIds",[]),tid=rid)
+            elif current and action=="delete":change_task(u["id"],rid,"deleted")
+            elif current and action=="complete":change_task(u["id"],rid,"completed")
+            elif current and action=="reopen":change_task(u["id"],rid,"active")
+            elif current and action=="update":
+                data=validate_task(u["id"],mutation.get("data",{}),current)
+                execute("UPDATE tasks SET workspace_id=%s,parent_task_id=%s,assignee_id=%s,title=%s,description=%s,priority=%s,project_id=%s,section_id=%s,start_at=%s,due_at=%s,deadline_at=%s,duration_minutes=%s,timezone=%s,recurrence=%s,position=%s,updated_at=%s WHERE id=%s",(data["workspaceId"],data["parentTaskId"],data["assigneeId"],data["title"],data["description"],data["priority"],data["projectId"],data["sectionId"],data["startAt"],data["dueAt"],data["deadlineAt"],data["durationMinutes"],data["timezone"],data["recurrence"],data["position"],now(),rid))
+            else:
+                results.append({"operationId":op_id,"status":"conflict_or_not_found"});continue
+            record_sync(u["id"],op_id,"task",rid,mutation)
             rev=fetch_one("SELECT revision FROM sync_state WHERE user_id=%s",(u["id"],))["revision"]
             results.append({"operationId":op_id,"status":"accepted","revision":rev})
         return jsonify({"results":results})
-    except ValueError as e:return bad(str(e))
-
+    except (ValueError,TypeError) as e:return bad(str(e))
 @app.post("/api/v1/backup/import")
 @require("tasks:write")
 def backup_import(u):
