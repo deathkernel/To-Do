@@ -148,6 +148,7 @@ def resolve_due(v):
 
 def validate_task(uid_user,p,existing=None):
     b={}
+    current_id=str(existing["id"]) if existing and existing.get("id") else None
     if existing:b={"title":existing["title"],"description":existing["description"] or "","priority":"P"+str(existing["priority"]),"projectId":existing["project_id"],"sectionId":existing["section_id"],"parentTaskId":existing["parent_task_id"],"assigneeId":existing.get("assignee_id"),"workspaceId":existing.get("workspace_id"),"startAt":iso(existing.get("start_at")),"dueAt":iso(existing["due_at"]),"deadlineAt":iso(existing["deadline_at"]),"durationMinutes":existing["duration_minutes"],"timezone":existing.get("timezone"),"recurrence":existing["recurrence"],"position":existing["position"]}
     d={**b,**p};title=str(d.get("title","")).strip();priority=str(d.get("priority","P4")).upper()
     if not 1<=len(title)<=500:raise ValueError("Task title must be 1-500 characters")
@@ -157,15 +158,33 @@ def validate_task(uid_user,p,existing=None):
         project=project_access(uid_user,pid,"editor")
         if not project:raise ValueError("Project not accessible")
         wid=project.get("workspace_id")
+    if wid and not fetch_one("SELECT 1 FROM workspace_members WHERE workspace_id=%s AND user_id=%s",(wid,uid_user)):raise ValueError("Workspace not accessible")
     if sid:
-        s=fetch_one("SELECT project_id FROM sections WHERE id=%s",(sid,))
-        if not s or (pid and str(s["project_id"])!=str(pid)):raise ValueError("Section does not belong to project")
-    if parent and not task_access(uid_user,parent):raise ValueError("Parent task not accessible")
-    if assignee and pid and not project_access(assignee,pid):raise ValueError("Assignee is not eligible")
+        sec=fetch_one("SELECT project_id FROM sections WHERE id=%s",(sid,))
+        if not sec:raise ValueError("Section not found")
+        if pid and str(sec["project_id"])!=str(pid):raise ValueError("Section does not belong to project")
+        pid=str(sec["project_id"])
+        if not project_access(uid_user,pid,"editor"):raise ValueError("Section project not accessible")
+        project=fetch_one("SELECT workspace_id FROM projects WHERE id=%s",(pid,))
+        if project and project.get("workspace_id"):wid=str(project["workspace_id"])
+    if parent:
+        if current_id and str(parent)==current_id:raise ValueError("Task cannot be its own parent")
+        cur=str(parent);seen=set()
+        for _ in range(101):
+            if cur in seen:raise ValueError("Task parent cycle detected")
+            seen.add(cur)
+            node=fetch_one("SELECT parent_task_id FROM tasks WHERE id=%s",(cur,))
+            if not node or not node.get("parent_task_id"):break
+            cur=str(node["parent_task_id"])
+            if current_id and cur==current_id:raise ValueError("Task parent cycle detected")
+        if not task_access(uid_user,parent):raise ValueError("Parent task not accessible")
+    if assignee:
+        if pid and not project_access(assignee,pid):raise ValueError("Assignee is not eligible")
+        elif wid and not fetch_one("SELECT 1 FROM workspace_members WHERE workspace_id=%s AND user_id=%s",(wid,assignee)):raise ValueError("Assignee is not a workspace member")
+        elif not pid and not wid and str(assignee)!=str(uid_user):raise ValueError("Assignee requires a shared project or workspace")
     dur=d.get("durationMinutes")
-    if dur is not None and (not isinstance(dur,int) or dur<0 or dur>1440):raise ValueError("Invalid duration")
+    if dur is not None and (isinstance(dur,bool) or not isinstance(dur,int) or dur<0 or dur>1440):raise ValueError("Invalid duration")
     return {"title":title,"description":str(d.get("description","")),"priority":int(priority[1]),"projectId":pid,"sectionId":sid,"parentTaskId":parent,"assigneeId":assignee,"workspaceId":wid,"startAt":dt(d.get("startAt")),"dueAt":dt(d.get("dueAt")),"deadlineAt":dt(d.get("deadlineAt")),"durationMinutes":dur,"timezone":str(d.get("timezone") or "UTC"),"recurrence":d.get("recurrence"),"position":str(d.get("position") or "a0")}
-
 def record_sync(user_id,op_id,kind,rid,mutation):
     if fetch_one("SELECT revision FROM sync_operations WHERE operation_id=%s AND user_id=%s",(op_id,user_id)):return
     s=fetch_one("SELECT revision FROM sync_state WHERE user_id=%s",(user_id,));rev=int(s["revision"])+1 if s else 1
