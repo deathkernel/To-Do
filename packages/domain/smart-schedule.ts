@@ -1,3 +1,0 @@
-import {validateTimeZone,validateDurationMinutes} from "./scheduling";import type {Task} from "./task";
-export function scheduleTask(task:Task,availableMinutes:number){validateDurationMinutes(task.durationMinutes);if((task.durationMinutes??0)>availableMinutes)throw new Error("Task does not fit available capacity");return {...task,dueAt:task.dueAt??new Date().toISOString()};}
-export function validateScheduleTimezone(timeZone:string){validateTimeZone(timeZone);return timeZone;}
