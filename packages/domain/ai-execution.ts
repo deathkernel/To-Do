@@ -1,4 +1,0 @@
-import type {AiProviderAdapter} from "../../apps/api/src/provider-registry";
-export interface ProposedAction{type:"create_task"|"update_task"|"schedule_task"|"complete_task";payload:Record<string,unknown>;reason:string;}
-export async function askAi(provider:AiProviderAdapter,prompt:string){const result=await provider.complete({prompt,system:"Return suggestions only. Never claim an action was executed. Core application validates permissions and mutations."});return result;}
-export function validateProposedAction(action:ProposedAction){if(!action.type||!action.reason||typeof action.payload!=="object")throw new Error("Invalid AI action proposal");return action;}
