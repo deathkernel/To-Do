@@ -1,4 +1,0 @@
-import {and,eq} from "drizzle-orm";import {getDb,automationRules,automationExecutions} from "./index";
-export async function listAutomationRules(ownerId:string){return getDb().select().from(automationRules).where(eq(automationRules.ownerId,ownerId));}
-export async function createAutomationRule(row:any){const r=await getDb().insert(automationRules).values({...row,conditions:JSON.stringify(row.conditions??[]),actions:JSON.stringify(row.actions??[])}).returning();return r[0];}
-export async function createAutomationExecution(row:any){const r=await getDb().insert(automationExecutions).values(row).returning();return r[0];}
