@@ -795,15 +795,22 @@ def deps(u,tid):
 @require("tasks:write")
 def deps_update(u,tid):
     try:
-        tid=uid(tid)
-        if not task_access(u["id"],tid,"editor"):return bad("Task not found",404)
+        tid=uid(tid);target=task_access(u["id"],tid,"editor")
+        if not target:return bad("Task not found",404)
+        raw=body().get("dependsOnTaskIds",[])
+        if not isinstance(raw,list) or len(raw)>100:raise ValueError("dependsOnTaskIds must be a list of at most 100 tasks")
+        deps_ids=[uid(x) for x in raw]
+        if len(set(deps_ids))!=len(deps_ids):raise ValueError("Duplicate dependencies are not allowed")
+        if tid in deps_ids:raise ValueError("A task cannot depend on itself")
+        for dep in deps_ids:
+            if not task_access(u["id"],dep):raise ValueError("Dependency task not accessible")
+            cycle=fetch_one("WITH RECURSIVE chain(id) AS (VALUES(%s::uuid) UNION SELECT d.depends_on_task_id FROM task_dependencies d JOIN chain c ON d.task_id=c.id) SELECT 1 FROM chain WHERE id=%s LIMIT 1",(dep,tid))
+            if cycle:raise ValueError("Dependency cycle detected")
         execute("DELETE FROM task_dependencies WHERE task_id=%s",(tid,))
-        for dep in body().get("dependsOnTaskIds",[]):
-            dep=uid(dep)
-            if dep!=tid and task_access(u["id"],dep):execute("INSERT INTO task_dependencies(task_id,depends_on_task_id) VALUES(%s,%s) ON CONFLICT DO NOTHING",(tid,dep))
+        for dep in deps_ids:execute("INSERT INTO task_dependencies(task_id,depends_on_task_id) VALUES(%s,%s)",(tid,dep))
+        record_sync(u["id"],tok("op"),"task",tid,{"action":"dependencies","dependsOnTaskIds":deps_ids})
         return jsonify({"updated":True})
     except ValueError as e:return bad(str(e))
-
 @app.get("/api/v1/reminders")
 @require("reminders:read")
 def reminders(u):
