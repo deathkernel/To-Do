@@ -14,10 +14,9 @@ from db import execute, fetch_all, fetch_one, get_conn, init_db
 load_dotenv()
 ROOT=Path(__file__).resolve().parent
 UPLOAD_ROOT=Path(os.getenv("UPLOAD_ROOT",str(ROOT/"data"/"uploads")));UPLOAD_ROOT.mkdir(parents=True,exist_ok=True)
+app=Flask(__name__,static_folder="static");app.config["MAX_CONTENT_LENGTH"]=int(os.getenv("MAX_UPLOAD_BYTES",str(25*1024*1024)))
 @app.get("/favicon.ico")
 def favicon(): return send_from_directory(ROOT/"static","favicon.svg",mimetype="image/svg+xml")
-
-app=Flask(__name__,static_folder="static");app.config["MAX_CONTENT_LENGTH"]=int(os.getenv("MAX_UPLOAD_BYTES",str(25*1024*1024)))
 ph=PasswordHasher()
 SCOPES={"tasks:read","tasks:write","projects:read","projects:write","labels:read","labels:write","comments:read","comments:write","reminders:read","reminders:write","sync:read","sync:write","workspaces:read","workspaces:write","attachments:read","attachments:write","goals:read","goals:write","templates:read","templates:write","automations:read","automations:write","analytics:read","devices:write"}
 ROLE={"viewer":10,"commenter":20,"editor":30,"manager":40,"owner":50};WROLE={"guest":10,"member":20,"admin":40,"owner":50}
@@ -75,13 +74,13 @@ def label_json(r):
     return {"id":r["id"],"userId":r["user_id"],"name":r["name"],"color":r["color"],"description":r["description"],"favorite":r["favorite"],"createdAt":iso(r["created_at"]),"updatedAt":iso(r["updated_at"])}
 
 def session_for(user_id):
-    raw=tok("td");execute("INSERT INTO sessions(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",(str(uuid.uuid4()),user_id,sh(raw),now()+timedelta(days=int(os.getenv("SESSION_DAYS","30")))));return raw
+    raw=tok("ses");execute("INSERT INTO sessions(id,user_id,token_hash,expires_at) VALUES(%s,%s,%s,%s)",(str(uuid.uuid4()),user_id,sh(raw),now()+timedelta(days=int(os.getenv("SESSION_DAYS","30")))));return raw
 def current_user():
     h=request.headers.get("Authorization","")
     if not h.startswith("Bearer "):raise PermissionError("Authentication required")
     raw=h[7:].strip()
     if not raw or len(raw)>512:raise PermissionError("Invalid token")
-    if raw.startswith("td_"):
+    if raw.startswith("api_"):
         r=fetch_one("SELECT t.*,u.email,u.display_name,u.email_verified,u.mfa_enabled FROM api_tokens t JOIN users u ON u.id=t.owner_id WHERE t.token_hash=%s AND t.revoked_at IS NULL",(sh(raw),))
         if not r:raise PermissionError("Invalid or revoked API token")
         return {"id":r["owner_id"],"email":r["email"],"displayName":r["display_name"],"emailVerified":bool(r["email_verified"]),"mfaEnabled":bool(r["mfa_enabled"]),"authType":"api-token","scopes":pj(r["scopes"],[])}
@@ -770,16 +769,6 @@ def reminder_snooze(u,rid):
         return jsonify({"id":out["id"],"triggerAt":iso(out["trigger_at"])})
     except ValueError as e:return bad(str(e))
 
-@app.patch("/api/v1/goals/<gid>")
-@require("goals:write")
-def goal_update_alias(u,gid):
-    try:
-        gid=uid(gid);r=fetch_one("SELECT * FROM goals WHERE id=%s AND user_id=%s",(gid,u["id"]))
-        if not r:return bad("Goal not found",404)
-        b=body();out=fetch_one("UPDATE goals SET name=%s,target=%s,current=%s,period=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name",r["name"])).strip(),max(1,int(b.get("target",r["target"]))),max(0,int(b.get("current",r["current"]))),str(b.get("period",r["period"])),now(),gid))
-        return jsonify({"id":out["id"],"name":out["name"],"target":out["target"],"current":out["current"],"period":out["period"],"projectId":out["project_id"]})
-    except ValueError as e:return bad(str(e))
-
 @app.get("/api/v1/goals")
 @require("goals:read")
 def goals(u):return jsonify([{"id":r["id"],"name":r["name"],"target":r["target"],"current":r["current"],"period":r["period"],"projectId":r["project_id"]} for r in fetch_all("SELECT * FROM goals WHERE user_id=%s ORDER BY created_at",(u["id"],))])
@@ -896,7 +885,7 @@ def api_token_create(u):
     try:
         b=body();scopes=b.get("scopes",["tasks:read","tasks:write"])
         if not isinstance(scopes,list) or not scopes or any(x not in SCOPES for x in scopes):raise ValueError("Invalid API token scopes")
-        raw=tok("td");r=fetch_one("INSERT INTO api_tokens(id,owner_id,name,token_hash,scopes) VALUES(%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],str(b.get("name","API token"))[:100],sh(raw),j(sorted(set(scopes)))));return jsonify({"id":r["id"],"name":r["name"],"scopes":scopes,"token":raw}),201
+        raw=tok("api");r=fetch_one("INSERT INTO api_tokens(id,owner_id,name,token_hash,scopes) VALUES(%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],str(b.get("name","API token"))[:100],sh(raw),j(sorted(set(scopes)))));return jsonify({"id":r["id"],"name":r["name"],"scopes":scopes,"token":raw}),201
     except ValueError as e:return bad(str(e))
 @app.delete("/api/v1/api-tokens/<tid>")
 @require("tasks:write")
