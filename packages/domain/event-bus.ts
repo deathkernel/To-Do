@@ -1,3 +1,0 @@
-export type DomainEvent={id:string,type:string,actorId:string,resourceId:string,payload:Record<string,unknown>,createdAt:string};
-export interface DomainEventBus{publish(event:DomainEvent):Promise<void>;subscribe(handler:(event:DomainEvent)=>Promise<void>):void;}
-export class InMemoryEventBus implements DomainEventBus{private handlers:Array<(e:DomainEvent)=>Promise<void>>=[];subscribe(h:(e:DomainEvent)=>Promise<void>){this.handlers.push(h)}async publish(e:DomainEvent){await Promise.all(this.handlers.map(h=>h(e)))}}
