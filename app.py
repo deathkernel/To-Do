@@ -952,16 +952,15 @@ def notification_read(u,nid):
 @app.get("/api/v1/backup/export")
 @require("tasks:read")
 def backup_export(u):
-    result={"version":2,"exportedAt":now().isoformat()}
-    for table in ("projects","sections","tasks","labels","comments","reminders","goals","saved_filters","templates"):
+    result={"version":3,"exportedAt":now().isoformat()}
+    ownership={"projects":"user_id","sections":None,"tasks":"user_id","labels":"user_id","comments":"user_id","reminders":"user_id","goals":"user_id","saved_filters":"user_id","templates":"owner_id"}
+    for table,owner_col in ownership.items():
         if table=="sections":rows=fetch_all("SELECT s.* FROM sections s JOIN projects p ON p.id=s.project_id WHERE p.user_id=%s",(u["id"],))
-        else:rows=fetch_all("SELECT * FROM %s WHERE user_id=%%s"%table,(u["id"],))
+        else:rows=fetch_all("SELECT * FROM %s WHERE %s=%%s"%(table,owner_col),(u["id"],))
         for row in rows:
             for k,v in list(row.items()):row[k]=iso(v)
         result[table]=rows
     return jsonify(result)
-
-
 @app.get("/api/v1/sync/pull")
 @require("sync:read")
 def sync_pull(u):
