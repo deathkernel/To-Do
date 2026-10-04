@@ -630,7 +630,7 @@ def search(u):
             elif term in ("p1","p2","p3","p4"):
                 keep=keep and r["priority"]==term.upper()
             elif term.startswith("@"):
-                names={x["name"].lower() for x in fetch_all("SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id=l.id WHERE tl.task_id=%s",(r["id"],)));keep=keep and term[1:] in names
+                names={x["name"].lower() for x in fetch_all("SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id=l.id WHERE tl.task_id=%s",(r["id"],))};keep=keep and term[1:] in names
             elif term not in hay:keep=False
         if keep:out.append(r)
     return jsonify(out)
