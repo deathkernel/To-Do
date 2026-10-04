@@ -1,9 +1,13 @@
 # Runtime API Surface
-Authentication: POST /api/v1/auth/register, POST /api/v1/auth/login, GET /api/v1/auth/me.
-Core: /api/v1/tasks, /api/v1/projects, /api/v1/labels, /api/v1/search/tasks.
-Planning: /api/v1/reminders, /api/v1/sync.
-Productivity: /api/v1/goals.
-Collaboration: /api/v1/comments/:taskId, /api/v1/workspaces.
-Automation: /api/v1/automations.
-Developer access: /api/v1/api-tokens.
-The current resource stores are runtime adapters; PostgreSQL repositories remain the persistence target before production deployment.
+
+Authentication: register, login, logout, session listing/revocation, email verification, password reset, TOTP MFA, provider discovery.
+Core: tasks, bulk actions, duplicate/permalink, task labels, dependencies, projects, sections, project/workspace members, labels, search and saved filters.
+Planning: reminders, snooze, calendar, time-blocks.
+Productivity: goals and analytics.
+Collaboration: comments, attachments, workspaces and activity feed.
+Automation: rules and execution history.
+Developer/data: scoped API tokens, backup export/import, sync push/pull, device registration.
+AI: provider-neutral quick-add, breakdown and rewrite adapters.
+Web app: HTML/CSS/vanilla JS frontend, PWA manifest/service worker and responsive list/board/calendar views.
+
+The runtime is the canonical Python + Flask + PostgreSQL + Redis implementation. External OAuth/OIDC providers, outbound email delivery, push providers, external calendars, managed object storage and native desktop/mobile binaries remain explicit integration boundaries rather than fake local implementations.
