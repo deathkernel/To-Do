@@ -282,10 +282,14 @@ def login():
 @app.post("/api/v1/auth/mfa/verify")
 @limited("mfa",20,300)
 def mfa_verify():
-    b=body();r=fetch_one("SELECT c.*,u.* FROM mfa_challenges c JOIN users u ON u.id=c.user_id WHERE c.token_hash=%s AND c.expires_at>%s",(sh(str(b.get("challenge",""))),now()))
-    if not r or not r["mfa_secret"] or not pyotp.TOTP(r["mfa_secret"]).verify(str(b.get("code",""))):return bad("Invalid MFA challenge",401)
-    execute("DELETE FROM mfa_challenges WHERE token_hash=%s",(sh(str(b.get("challenge",""))),));return jsonify({"user":user_json(r),"token":session_for(r["user_id"])})
-
+    try:
+        b=body();challenge=str(b.get("challenge","")).strip();code=str(b.get("code","")).strip()
+        if not challenge or not code:raise ValueError("MFA challenge and code are required")
+        r=fetch_one("SELECT c.*,u.* FROM mfa_challenges c JOIN users u ON u.id=c.user_id WHERE c.token_hash=%s AND c.expires_at>%s",(sh(challenge),now()))
+        if not r or not r["mfa_secret"] or not pyotp.TOTP(r["mfa_secret"]).verify(code):return bad("Invalid MFA challenge",401)
+        execute("DELETE FROM mfa_challenges WHERE token_hash=%s",(sh(challenge),));return jsonify({"user":user_json(r),"token":session_for(r["user_id"])})
+    except ValueError as e:return bad(str(e))
+    except Exception:return bad("MFA service unavailable",503)
 @app.post("/api/v1/auth/logout")
 def logout():
     h=request.headers.get("Authorization","")
