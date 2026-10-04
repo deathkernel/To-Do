@@ -80,13 +80,12 @@ def current_user():
     if not h.startswith("Bearer "):raise PermissionError("Authentication required")
     raw=h[7:].strip()
     if not raw or len(raw)>512:raise PermissionError("Invalid token")
-    if raw.startswith("api_"):
-        r=fetch_one("SELECT t.*,u.email,u.display_name,u.email_verified,u.mfa_enabled FROM api_tokens t JOIN users u ON u.id=t.owner_id WHERE t.token_hash=%s AND t.revoked_at IS NULL",(sh(raw),))
-        if not r:raise PermissionError("Invalid or revoked API token")
-        return {"id":r["owner_id"],"email":r["email"],"displayName":r["display_name"],"emailVerified":bool(r["email_verified"]),"mfaEnabled":bool(r["mfa_enabled"]),"authType":"api-token","scopes":pj(r["scopes"],[])}
-    r=fetch_one("SELECT s.*,u.email,u.display_name,u.email_verified,u.mfa_enabled FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>%s",(sh(raw),now()))
-    if not r:raise PermissionError("Invalid or expired session")
-    return {"id":r["user_id"],"email":r["email"],"displayName":r["display_name"],"emailVerified":bool(r["email_verified"]),"mfaEnabled":bool(r["mfa_enabled"]),"authType":"session","scopes":None}
+    hashed=sh(raw)
+    token=fetch_one("SELECT t.*,u.email,u.display_name,u.email_verified,u.mfa_enabled FROM api_tokens t JOIN users u ON u.id=t.owner_id WHERE t.token_hash=%s AND t.revoked_at IS NULL",(hashed,))
+    if token:return {"id":token["owner_id"],"email":token["email"],"displayName":token["display_name"],"emailVerified":bool(token["email_verified"]),"mfaEnabled":bool(token["mfa_enabled"]),"authType":"api-token","scopes":pj(token["scopes"],[])}
+    session=fetch_one("SELECT s.*,u.email,u.display_name,u.email_verified,u.mfa_enabled FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>%s",(hashed,now()))
+    if not session:raise PermissionError("Invalid or expired session")
+    return {"id":session["user_id"],"email":session["email"],"displayName":session["display_name"],"emailVerified":bool(session["email_verified"]),"mfaEnabled":bool(session["mfa_enabled"]),"authType":"session","scopes":None}
 def require(scope):
     def deco(fn):
         @wraps(fn)
@@ -186,12 +185,14 @@ def validate_task(uid_user,p,existing=None):
     if dur is not None and (isinstance(dur,bool) or not isinstance(dur,int) or dur<0 or dur>1440):raise ValueError("Invalid duration")
     return {"title":title,"description":str(d.get("description","")),"priority":int(priority[1]),"projectId":pid,"sectionId":sid,"parentTaskId":parent,"assigneeId":assignee,"workspaceId":wid,"startAt":dt(d.get("startAt")),"dueAt":dt(d.get("dueAt")),"deadlineAt":dt(d.get("deadlineAt")),"durationMinutes":dur,"timezone":str(d.get("timezone") or "UTC"),"recurrence":d.get("recurrence"),"position":str(d.get("position") or "a0")}
 def record_sync(user_id,op_id,kind,rid,mutation):
-    if fetch_one("SELECT revision FROM sync_operations WHERE operation_id=%s AND user_id=%s",(op_id,user_id)):return
-    s=fetch_one("SELECT revision FROM sync_state WHERE user_id=%s",(user_id,));rev=int(s["revision"])+1 if s else 1
-    if s:execute("UPDATE sync_state SET revision=%s,updated_at=%s WHERE user_id=%s",(rev,now(),user_id))
-    else:execute("INSERT INTO sync_state(user_id,revision) VALUES(%s,%s)",(user_id,rev))
-    execute("INSERT INTO sync_operations(operation_id,user_id,revision,resource_type,resource_id,mutation_json) VALUES(%s,%s,%s,%s,%s,%s)",(op_id,user_id,rev,kind,rid,j(mutation)))
-
+    with get_conn() as c:
+        with c.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",(str(user_id),))
+            cur.execute("SELECT revision FROM sync_operations WHERE operation_id=%s AND user_id=%s",(op_id,user_id))
+            if cur.fetchone():return
+            cur.execute("INSERT INTO sync_state(user_id,revision) VALUES(%s,1) ON CONFLICT(user_id) DO UPDATE SET revision=sync_state.revision+1,updated_at=%s RETURNING revision",(user_id,now()))
+            rev=cur.fetchone()['revision']
+            cur.execute("INSERT INTO sync_operations(operation_id,user_id,revision,resource_type,resource_id,mutation_json) VALUES(%s,%s,%s,%s,%s,%s)",(op_id,user_id,rev,kind,rid,j(mutation)))
 def set_labels(uid_user,task_id,ids):
     if ids is None: ids=[]
     if not isinstance(ids,list): raise ValueError("labelIds must be a list")
