@@ -15,6 +15,12 @@ import {registerResourceRoutes} from "./resource-routes";
 import {registerSyncRoutes} from "./sync-routes";
 import {registerApiTokenRoutes} from "./api-token-routes";
 
+function isPrivateIpv4(hostname:string){
+  const parts=hostname.split(".").map(Number);
+  if(parts.length!==4||parts.some(x=>!Number.isInteger(x)||x<0||x>255))return false;
+  const [a,b]=parts;
+  return a===10||a===127||(a===192&&b===168)||(a===172&&b>=16&&b<=31);
+}
 function corsOrigin(){
   const configured=process.env.CORS_ORIGIN?.split(",").map(x=>x.trim()).filter(Boolean)??[];
   if(process.env.NODE_ENV!=="production"){
@@ -22,7 +28,8 @@ function corsOrigin(){
       if(!origin)return true;
       try{
         const url=new URL(origin);
-        if((url.hostname==="localhost"||url.hostname==="127.0.0.1")&&(url.protocol==="http:"||url.protocol==="https:"))return true;
+        const localHost=url.hostname==="localhost"||url.hostname==="127.0.0.1"||isPrivateIpv4(url.hostname);
+        if(localHost&&(url.protocol==="http:"||url.protocol==="https:"))return true;
       }catch{}
       return configured.includes(origin);
     };
@@ -35,6 +42,7 @@ export function buildServer(){
   app.register(cors,{origin:corsOrigin(),credentials:true});
   app.register(helmet);
   app.register(rateLimit,{max:120,timeWindow:"1 minute"});
+  app.get("/",async()=>({service:"todo-api",status:"ok",health:"/health"}));
   app.get("/health",async()=>({status:"ok",service:"todo-api",timestamp:new Date().toISOString()}));
   app.get("/ready",async(_req,reply)=>{try{await checkDatabase();return {status:"ready"};}catch{return reply.code(503).send({status:"not_ready"});}});
   registerAuthRoutes(app);
