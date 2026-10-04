@@ -59,3 +59,29 @@ CREATE INDEX IF NOT EXISTS notifications_task_idx ON notifications(task_id);
 CREATE TABLE IF NOT EXISTS sync_state(user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision integer NOT NULL DEFAULT 0,updated_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS sync_operations(operation_id varchar(200) PRIMARY KEY,user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,revision integer NOT NULL,resource_type varchar(64) NOT NULL,resource_id uuid NOT NULL,mutation_json text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(user_id,revision));
 CREATE TABLE IF NOT EXISTS api_tokens(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,name varchar(100) NOT NULL,token_hash text UNIQUE NOT NULL,scopes text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),revoked_at timestamptz);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='projects_parent_fk') THEN
+    ALTER TABLE projects ADD CONSTRAINT projects_parent_fk FOREIGN KEY (parent_id) REFERENCES projects(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='tasks_parent_fk') THEN
+    ALTER TABLE tasks ADD CONSTRAINT tasks_parent_fk FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='tasks_priority_ck') THEN
+    ALTER TABLE tasks ADD CONSTRAINT tasks_priority_ck CHECK (priority BETWEEN 1 AND 4);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='tasks_status_ck') THEN
+    ALTER TABLE tasks ADD CONSTRAINT tasks_status_ck CHECK (status IN ('active','completed','deleted'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='tasks_duration_ck') THEN
+    ALTER TABLE tasks ADD CONSTRAINT tasks_duration_ck CHECK (duration_minutes IS NULL OR duration_minutes BETWEEN 0 AND 1440);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='goals_target_ck') THEN
+    ALTER TABLE goals ADD CONSTRAINT goals_target_ck CHECK (target >= 1);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='goals_current_ck') THEN
+    ALTER TABLE goals ADD CONSTRAINT goals_current_ck CHECK (current >= 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='time_blocks_range_ck') THEN
+    ALTER TABLE time_blocks ADD CONSTRAINT time_blocks_range_ck CHECK (end_at > start_at);
+  END IF;
+END $$;
