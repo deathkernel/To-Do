@@ -1,3 +1,0 @@
-import {InMemoryJobQueue,type JobQueue} from "../../../packages/db/src/queue";
-export async function processJobs(queue:JobQueue,handlers:Record<string,(payload:unknown)=>Promise<void>>,limit=10){let count=0;while(count<limit){const job=await queue.dequeue();if(!job)break;try{const handler=handlers[job.name];if(!handler)throw new Error("No handler for "+job.name);await handler(job.payload);await queue.ack(job.id)}catch(e){await queue.fail(job.id,e instanceof Error?e.message:"job failed")}count++}return count}
-export function createDefaultQueue(){if(process.env.NODE_ENV==="production")throw new Error("Durable job queue is required in production");return new InMemoryJobQueue()}
