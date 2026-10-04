@@ -1,4 +1,0 @@
-import type {AiCapability,AiProvider} from "./ai";
-export interface AiProposal{capability:AiCapability;text:string;actions:unknown[];provider:string;createdAt:string;}
-export async function executeAiProposal(provider:AiProvider,capability:AiCapability,input:string):Promise<AiProposal>{if(!input.trim())throw new Error("AI input cannot be empty");const result=await provider.complete({capability,prompt:input});return {capability,text:result.text,actions:[],provider:provider.name,createdAt:new Date().toISOString()};}
-export function assertSafeAiMutation(action:unknown){if(!action||typeof action!=="object")throw new Error("Invalid AI action");const value=action as Record<string,unknown>;if(value.type==="delete_all_tasks")throw new Error("Unsafe AI action");return value;}
