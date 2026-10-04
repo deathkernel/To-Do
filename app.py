@@ -370,6 +370,8 @@ def workspace_member_add(u,wid):
         if not target:return bad("User not found",404)
         role=str(b.get("role","member"))
         if role not in ("guest","member","admin"):return bad("Invalid role")
+        existing=fetch_one("SELECT role FROM workspace_members WHERE workspace_id=%s AND user_id=%s",(wid,target["id"]))
+        if existing and existing["role"]=="owner":return bad("Workspace owner role cannot be changed",403)
         execute("INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,%s) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=EXCLUDED.role",(wid,target["id"],role));return jsonify({"workspaceId":wid,"userId":target["id"],"role":role}),201
     except ValueError as e:return bad(str(e))
 
@@ -503,17 +505,22 @@ def project_member_remove(u,pid,member_id):
 @app.get("/api/v1/tasks")
 @require("tasks:read")
 def tasks(u):
-    where=["(t.user_id=%s OR t.assignee_id=%s OR EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id=t.project_id AND pm.user_id=%s) OR EXISTS(SELECT 1 FROM workspace_members wm WHERE wm.workspace_id=t.workspace_id AND wm.user_id=%s))","t.status<>'deleted'"];params=[u["id"],u["id"],u["id"],u["id"]]
-    q=request.args.get("q","").strip()
-    if q:where.append("(LOWER(t.title) LIKE LOWER(%s) OR LOWER(COALESCE(t.description,'')) LIKE LOWER(%s))");params += ["%"+q+"%","%"+q+"%"]
-    if request.args.get("projectId"):where.append("t.project_id=%s");params.append(uid(request.args["projectId"]))
-    if request.args.get("status"):where.append("t.status=%s");params.append(request.args["status"])
-    if request.args.get("priority"):where.append("t.priority=%s");params.append(int(str(request.args["priority"]).replace("P","")))
-    due=request.args.get("due")
-    if due=="today":where.append("t.due_at::date=CURRENT_DATE")
-    if due=="overdue":where.append("t.due_at IS NOT NULL AND t.due_at<%s AND t.status<>'completed'");params.append(now())
-    if due=="upcoming":where.append("t.due_at>%s");params.append(now())
-    rows=fetch_all("SELECT t.* FROM tasks t WHERE "+" AND ".join(where)+" ORDER BY t.position,t.due_at NULLS LAST,t.created_at",tuple(params));return jsonify([task_json(r) for r in rows])
+    try:
+        where=["(t.user_id=%s OR t.assignee_id=%s OR EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id=t.project_id AND pm.user_id=%s) OR EXISTS(SELECT 1 FROM workspace_members wm WHERE wm.workspace_id=t.workspace_id AND wm.user_id=%s))","t.status<>'deleted'"];params=[u["id"],u["id"],u["id"],u["id"]]
+        q=request.args.get("q","").strip()
+        if q:where.append("(LOWER(t.title) LIKE LOWER(%s) OR LOWER(COALESCE(t.description,'')) LIKE LOWER(%s))");params += ["%"+q+"%","%"+q+"%"]
+        if request.args.get("projectId"):where.append("t.project_id=%s");params.append(uid(request.args["projectId"]))
+        if request.args.get("status"):where.append("t.status=%s");params.append(request.args["status"])
+        if request.args.get("priority"):
+            priority=str(request.args["priority"]).upper()
+            if priority not in ("P1","P2","P3","P4"):raise ValueError("Invalid priority")
+            where.append("t.priority=%s");params.append(int(priority[1]))
+        due=request.args.get("due")
+        if due=="today":where.append("t.due_at::date=CURRENT_DATE")
+        if due=="overdue":where.append("t.due_at IS NOT NULL AND t.due_at<%s AND t.status<>'completed'");params.append(now())
+        if due=="upcoming":where.append("t.due_at>%s");params.append(now())
+        rows=fetch_all("SELECT t.* FROM tasks t WHERE "+" AND ".join(where)+" ORDER BY t.position,t.due_at NULLS LAST,t.created_at",tuple(params));return jsonify([task_json(r) for r in rows])
+    except ValueError as e:return bad(str(e))
 @app.post("/api/v1/tasks")
 @require("tasks:write")
 def task_create(u):
