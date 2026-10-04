@@ -130,15 +130,15 @@ def task_access(user_id,tid,minimum="viewer"):
 
 def parse_quick_add(text):
     v=text.strip();p="P4";labels=[]
-    m=re.search(r"(?:^|\\s)(p[1-4])(?:\\s|$)",v,re.I)
-    if m:p=m.group(1).upper();v=re.sub(r"(?:^|\\s)p[1-4](?:\\s|$)"," ",v,flags=re.I)
+    m=re.search(r"(?:^|\s)(p[1-4])(?:\s|$)",v,re.I)
+    if m:p=m.group(1).upper();v=re.sub(r"(?:^|\s)p[1-4](?:\s|$)"," ",v,flags=re.I)
     labels=re.findall(r"@([A-Za-z0-9_-]{1,50})",v);v=re.sub(r"@([A-Za-z0-9_-]{1,50})"," ",v)
-    project=None;pm=re.search(r"#([^#\\s]+)",v)
+    project=None;pm=re.search(r"#([^#\s]+)",v)
     if pm:project=pm.group(1);v=v.replace("#"+project," ")
-    due=None;dm=re.search(r"\\b(today|tomorrow|next\\s+week)\\b",v,re.I)
+    due=None;dm=re.search(r"\b(today|tomorrow|next\s+week)\b",v,re.I)
     if dm:due=dm.group(1).lower();v=v[:dm.start()]+" "+v[dm.end():]
-    rm=re.search(r"\\bevery\\s+(day|week|month)\\b",v,re.I);rec=rm.group(0) if rm else None
-    return {"title":re.sub(r"\\s+"," ",v).strip(),"priority":p,"labels":labels,"project":project,"due":due,"recurrence":rec}
+    rm=re.search(r"\bevery\s+(day|week|month)\b",v,re.I);rec=rm.group(0) if rm else None
+    return {"title":re.sub(r"\s+"," ",v).strip(),"priority":p,"labels":labels,"project":project,"due":due,"recurrence":rec}
 def resolve_due(v):
     if not v:return None
     base=now().replace(hour=18,minute=0,second=0,microsecond=0)
