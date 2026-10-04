@@ -14,6 +14,9 @@ from db import execute, fetch_all, fetch_one, get_conn, init_db
 load_dotenv()
 ROOT=Path(__file__).resolve().parent
 UPLOAD_ROOT=Path(os.getenv("UPLOAD_ROOT",str(ROOT/"data"/"uploads")));UPLOAD_ROOT.mkdir(parents=True,exist_ok=True)
+@app.get("/favicon.ico")
+def favicon(): return send_from_directory(ROOT/"static","favicon.svg",mimetype="image/svg+xml")
+
 app=Flask(__name__,static_folder="static");app.config["MAX_CONTENT_LENGTH"]=int(os.getenv("MAX_UPLOAD_BYTES",str(25*1024*1024)))
 ph=PasswordHasher()
 SCOPES={"tasks:read","tasks:write","projects:read","projects:write","labels:read","labels:write","comments:read","comments:write","reminders:read","reminders:write","sync:read","sync:write","workspaces:read","workspaces:write","attachments:read","attachments:write","goals:read","goals:write","templates:read","templates:write","automations:read","automations:write","analytics:read","devices:write"}
