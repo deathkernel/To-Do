@@ -1,3 +1,0 @@
-import {validateBackupManifest,type BackupManifest} from "./backup";
-export interface ExportBundle{manifest:BackupManifest;data:Record<string,unknown[]>;}
-export function validateExportBundle(bundle:ExportBundle){const result=validateBackupManifest(bundle.manifest);for(const [name,rows] of Object.entries(bundle.data))if(!Array.isArray(rows))result.errors.push("Resource "+name+" must be an array");return {...result,valid:result.errors.length===0};}
