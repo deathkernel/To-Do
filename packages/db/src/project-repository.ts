@@ -1,5 +1,0 @@
-import {and,eq} from "drizzle-orm";import {getDb,projects,sections} from "./index";
-export async function createProject(row:any){const r=await getDb().insert(projects).values(row).returning();return r[0];}
-export async function listProjects(userId:string){return getDb().select().from(projects).where(eq(projects.userId,userId));}
-export async function createSection(userId:string,row:any){const p=await getDb().select({id:projects.id}).from(projects).where(and(eq(projects.id,row.projectId),eq(projects.userId,userId)));if(!p[0])throw new Error("Project not found");const r=await getDb().insert(sections).values(row).returning();return r[0];}
-export async function listSections(userId:string,projectId:string){const p=await getDb().select({id:projects.id}).from(projects).where(and(eq(projects.id,projectId),eq(projects.userId,userId)));if(!p[0])throw new Error("Project not found");return getDb().select().from(sections).where(eq(sections.projectId,projectId));}
