@@ -1,5 +1,0 @@
-import {and,eq} from "drizzle-orm";import {getDb,projectMembers,workspaceMembers,workspaces} from "./index";
-export async function addProjectMember(row:any){const r=await getDb().insert(projectMembers).values(row).returning();return r[0];}
-export async function getProjectRole(projectId:string,userId:string){const r=await getDb().select().from(projectMembers).where(and(eq(projectMembers.projectId,projectId),eq(projectMembers.userId,userId)));return r[0]??null;}
-export async function addWorkspaceMember(row:any){const r=await getDb().insert(workspaceMembers).values(row).returning();return r[0];}
-export async function listWorkspaceMembers(workspaceId:string,userId:string){const owner=await getDb().select({id:workspaces.id}).from(workspaces).where(and(eq(workspaces.id,workspaceId),eq(workspaces.ownerId,userId)));if(!owner[0])throw new Error("Workspace access denied");return getDb().select().from(workspaceMembers).where(eq(workspaceMembers.workspaceId,workspaceId));}
