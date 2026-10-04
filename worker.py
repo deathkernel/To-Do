@@ -1,6 +1,6 @@
 import os,time,uuid
 from datetime import datetime,timezone
-from db import execute,fetch_all,init_db
+from db import execute,fetch_all,fetch_one,init_db
 
 def now():return datetime.now(timezone.utc)
 
