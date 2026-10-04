@@ -1,4 +1,0 @@
-import type {Task} from "./task";
-export function bulkComplete(tasks:Task[],ids:string[],now=new Date().toISOString()){const wanted=new Set(ids);return tasks.map(t=>wanted.has(t.id)?{...t,status:"completed" as const,completedAt:now,updatedAt:now}:t)}
-export function bulkDelete(tasks:Task[],ids:string[],now=new Date().toISOString()){const wanted=new Set(ids);return tasks.map(t=>wanted.has(t.id)?{...t,status:"deleted" as const,deletedAt:now,updatedAt:now}:t)}
-export function bulkMove(tasks:Task[],ids:string[],projectId:string|null,sectionId:string|null,now=new Date().toISOString()){const wanted=new Set(ids);return tasks.map(t=>wanted.has(t.id)?{...t,projectId,sectionId,updatedAt:now}:t)}
