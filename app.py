@@ -1029,13 +1029,6 @@ def device_register(u):
     b=body();r=fetch_one("INSERT INTO devices(id,user_id,platform,name,push_token) VALUES(%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],str(b.get("platform","web"))[:32],str(b.get("name","browser"))[:120],b.get("pushToken")))
     return jsonify({"id":r["id"],"platform":r["platform"],"name":r["name"],"lastSeenAt":iso(r["last_seen_at"])}),201
 
-@app.get("/api/v1/activity")
-@require("tasks:read")
-def activity_feed(u):
-    rows=fetch_all("SELECT * FROM activity_log WHERE user_id=%s ORDER BY created_at DESC LIMIT 200",(u["id"],))
-    return jsonify([{"id":r["id"],"action":r["action"],"resourceType":r["resource_type"],"resourceId":r["resource_id"],"details":pj(r["details"],{}),"createdAt":iso(r["created_at"])} for r in rows])
-
-
 @app.errorhandler(413)
 def too_large(_):return bad("Uploaded file is too large",413)
 
