@@ -142,7 +142,7 @@ def validate_reminder_payload(b,existing=None):
     return trigger,dt(d.get("triggerAt")),minutes,d.get("locationId"),recurring,bool(d.get("enabled",True))
 
 AUTOMATION_TRIGGERS={"task_created","task_completed"}
-def validate_automation_payload(b,existing=None):
+def validate_automation_payload(b,owner_id,existing=None):
     name=str(b.get("name",existing["name"] if existing else "Automation")).strip()
     if not 1<=len(name)<=200:raise ValueError("Automation name must be 1-200 characters")
     trigger=str(b.get("trigger",existing["trigger"] if existing else "task_created"))
@@ -155,8 +155,7 @@ def validate_automation_payload(b,existing=None):
         if action["type"]=="add_label":
             try:lid=uid(action.get("labelId"))
             except ValueError as e:raise ValueError("add_label action requires a valid labelId") from e
-            if not fetch_one("SELECT id FROM labels WHERE id=%s AND user_id=%s",(lid,existing["owner_id"] if existing else b.get("_owner_id"))):
-                pass
+            if not fetch_one("SELECT id FROM labels WHERE id=%s AND user_id=%s",(lid,owner_id)):raise ValueError("Automation label must belong to the owner")
     return name,trigger,conditions,actions,bool(b.get("enabled",existing["enabled"] if existing else True))
 def parse_quick_add(text):
     v=text.strip();p="P4";labels=[]
