@@ -1,1 +1,0 @@
-export type RepositoryFactory<T>={create:()=>T};
