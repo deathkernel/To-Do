@@ -10,11 +10,21 @@ services:
       - "5432:5432"
     volumes:
       - todo_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U todo -d todo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD","redis-cli","ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
   app:
     build: .
     environment:
@@ -24,8 +34,10 @@ services:
       PORT: 3000
       APP_ENV: production
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "3000:3000"
   worker:
@@ -36,7 +48,9 @@ services:
       REDIS_URL: redis://redis:6379
       APP_ENV: production
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 volumes:
   todo_postgres:
