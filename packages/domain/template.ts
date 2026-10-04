@@ -1,1 +1,0 @@
-export interface Template { id:string; ownerId:string; name:string; description:string; scope:"task"|"project"; visibility:"private"|"shared"; version:number; contentJson:string; createdAt:string; updatedAt:string; }
