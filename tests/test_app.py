@@ -51,7 +51,10 @@ def test_frontend_navigation_contract():
     js=Path("static/app.js").read_text(encoding="utf-8")
     assert "function setView(" in js
     assert "function selectProject(" in js
-    assert 'src="/static/app.js"' in Path("templates/index.html").read_text(encoding="utf-8")
+    html=Path("templates/index.html").read_text(encoding="utf-8")
+    assert 'src="/static/app.js?v=7"' in html
+    assert html.count("<script") == 1
+    assert html.count("<div id=\"app\">") == 1
 
 def auth_user(client):
     email="audit-"+uuid.uuid4().hex[:12]+"@example.com"
