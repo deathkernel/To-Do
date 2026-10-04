@@ -255,7 +255,7 @@ def validate_task(uid_user,p,existing=None):
         elif not pid and not wid and str(assignee)!=str(uid_user):raise ValueError("Assignee requires a shared project or workspace")
     dur=d.get("durationMinutes")
     if dur is not None and (isinstance(dur,bool) or not isinstance(dur,int) or dur<0 or dur>1440):raise ValueError("Invalid duration")
-    return {"title":title,"description":description,"priority":int(priority[1]),"projectId":pid,"sectionId":sid,"parentTaskId":parent,"assigneeId":assignee,"workspaceId":wid,"startAt":dt(d.get("startAt")),"dueAt":dt(d.get("dueAt")),"deadlineAt":dt(d.get("deadlineAt")),"durationMinutes":dur,"timezone":str(d.get("timezone") or "UTC"),"recurrence":d.get("recurrence"),"position":str(d.get("position") or "a0")}
+    return {"title":title,"description":description,"priority":int(priority[1]),"projectId":pid,"sectionId":sid,"parentTaskId":parent,"assigneeId":assignee,"workspaceId":wid,"startAt":dt(d.get("startAt")),"dueAt":dt(d.get("dueAt")),"deadlineAt":dt(d.get("deadlineAt")),"durationMinutes":dur,"timezone":str(d.get("timezone") or "UTC"),"recurrence":str(d.get("recurrence") or "")[:500] or None,"position":str(d.get("position") or "a0")[:100]}
 def record_sync(user_id,op_id,kind,rid,mutation):
     with get_conn() as c:
         with c.cursor() as cur:
