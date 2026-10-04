@@ -129,6 +129,35 @@ def task_access(user_id,tid,minimum="viewer"):
         if m and WROLE.get(m["role"],0)>= (10 if minimum=="viewer" else 20):return t
     return None
 
+def validate_reminder_payload(b,existing=None):
+    base={"trigger":existing.get("trigger","time"),"triggerAt":iso(existing.get("trigger_at")) if existing else None,"minutesBefore":existing.get("minutes_before") if existing else None,"locationId":existing.get("location_id") if existing else None,"recurringRule":existing.get("recurring_rule") if existing else None,"enabled":existing.get("enabled",True) if existing else True}
+    d={**base,**b};trigger=str(d.get("trigger","time")).strip().lower()
+    if trigger not in ("time","before_due","location"):raise ValueError("Invalid reminder trigger")
+    minutes=d.get("minutesBefore")
+    if minutes is not None and (isinstance(minutes,bool) or not isinstance(minutes,int) or minutes<0 or minutes>10080):raise ValueError("minutesBefore must be 0-10080")
+    if trigger in ("time","before_due") and not d.get("triggerAt"):raise ValueError("triggerAt is required")
+    if trigger=="location" and not d.get("locationId"):raise ValueError("locationId is required")
+    recurring=d.get("recurringRule")
+    if recurring and str(recurring).strip().lower() not in ("daily","every day","weekly","every week","monthly","every month"):raise ValueError("Unsupported recurringRule")
+    return trigger,dt(d.get("triggerAt")),minutes,d.get("locationId"),recurring,bool(d.get("enabled",True))
+
+AUTOMATION_TRIGGERS={"task_created","task_completed"}
+def validate_automation_payload(b,existing=None):
+    name=str(b.get("name",existing["name"] if existing else "Automation")).strip()
+    if not 1<=len(name)<=200:raise ValueError("Automation name must be 1-200 characters")
+    trigger=str(b.get("trigger",existing["trigger"] if existing else "task_created"))
+    if trigger not in AUTOMATION_TRIGGERS:raise ValueError("Invalid automation trigger")
+    conditions=b.get("conditions",pj(existing["conditions"],{}) if existing else {})
+    actions=b.get("actions",pj(existing["actions"],[]) if existing else [])
+    if not isinstance(conditions,dict) or not isinstance(actions,list) or len(actions)>20:raise ValueError("Invalid automation conditions/actions")
+    for action in actions:
+        if not isinstance(action,dict) or action.get("type") not in ("complete_task","add_label"):raise ValueError("Invalid automation action")
+        if action["type"]=="add_label":
+            try:lid=uid(action.get("labelId"))
+            except ValueError as e:raise ValueError("add_label action requires a valid labelId") from e
+            if not fetch_one("SELECT id FROM labels WHERE id=%s AND user_id=%s",(lid,existing["owner_id"] if existing else b.get("_owner_id"))):
+                pass
+    return name,trigger,conditions,actions,bool(b.get("enabled",existing["enabled"] if existing else True))
 def parse_quick_add(text):
     v=text.strip();p="P4";labels=[]
     m=re.search(r"(?:^|\s)(p[1-4])(?:\s|$)",v,re.I)
