@@ -451,7 +451,9 @@ def section_update(u,sid):
         sid=uid(sid);r=fetch_one("SELECT project_id FROM sections WHERE id=%s",(sid,))
         if not r:return bad("Section not found",404)
         if not project_can_mutate(u["id"],r["project_id"]):return bad("Section permission denied",403)
-        b=body();out=fetch_one("UPDATE sections SET name=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(str(b.get("name","")).strip(),int(b.get("position",0)),now(),sid))
+        b=body();name=str(b.get("name","")).strip()
+        if not 1<=len(name)<=200:raise ValueError("Section name must be 1-200 characters")
+        out=fetch_one("UPDATE sections SET name=%s,position=%s,updated_at=%s WHERE id=%s RETURNING *",(name,int(b.get("position",0)),now(),sid))
         return jsonify({"id":out["id"],"projectId":out["project_id"],"name":out["name"],"position":out["position"]})
     except ValueError as e:return bad(str(e))
 
@@ -633,7 +635,9 @@ def label_update(u,lid):
     try:
         lid=uid(lid);r=fetch_one("SELECT * FROM labels WHERE id=%s AND user_id=%s",(lid,u["id"]))
         if not r:return bad("Label not found",404)
-        b=body();r=fetch_one("UPDATE labels SET name=%s,color=%s,description=%s,favorite=%s,updated_at=%s WHERE id=%s AND user_id=%s RETURNING *",(str(b.get("name",r["name"])).strip(),b.get("color",r["color"]),b.get("description",r["description"]),bool(b.get("favorite",r["favorite"])),now(),lid,u["id"]));return jsonify(label_json(r))
+        b=body();name=str(b.get("name",r["name"])).strip()
+        if not 1<=len(name)<=100:raise ValueError("Label name must be 1-100 characters")
+        r=fetch_one("UPDATE labels SET name=%s,color=%s,description=%s,favorite=%s,updated_at=%s WHERE id=%s AND user_id=%s RETURNING *",(name,b.get("color",r["color"]),b.get("description",r["description"]),bool(b.get("favorite",r["favorite"])),now(),lid,u["id"]));return jsonify(label_json(r))
     except ValueError as e:return bad(str(e))
 @app.delete("/api/v1/labels/<lid>")
 @require("labels:write")
@@ -832,8 +836,10 @@ def time_block_create(u):
     try:
         b=body();start=dt(b.get("startAt"));end=dt(b.get("endAt"))
         if not start or not end or end<=start:return bad("Valid startAt/endAt required")
+        task_id=uid(b["taskId"]) if b.get("taskId") else None
+        if task_id and not task_access(u["id"],task_id):return bad("Task not found",404)
         if fetch_one("SELECT id FROM time_blocks WHERE user_id=%s AND start_at<%s AND end_at>%s LIMIT 1",(u["id"],end,start)):return bad("Time block conflict",409)
-        r=fetch_one("INSERT INTO time_blocks(id,user_id,task_id,start_at,end_at,notes) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],uid(b["taskId"]) if b.get("taskId") else None,start,end,b.get("notes")));return jsonify({"id":r["id"],"taskId":r["task_id"],"startAt":iso(r["start_at"]),"endAt":iso(r["end_at"]),"notes":r["notes"]}),201
+        r=fetch_one("INSERT INTO time_blocks(id,user_id,task_id,start_at,end_at,notes) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *",(str(uuid.uuid4()),u["id"],task_id,start,end,b.get("notes")));return jsonify({"id":r["id"],"taskId":r["task_id"],"startAt":iso(r["start_at"]),"endAt":iso(r["end_at"]),"notes":r["notes"]}),201
     except ValueError as e:return bad(str(e))
 
 @app.get("/api/v1/templates")
