@@ -675,21 +675,27 @@ def task_bulk(u):
         action=b.get("action");out=[]
         for tid in ids:
             if not task_access(u["id"],tid,"editor"):continue
-            if action in ("complete","reopen","delete"):out.append(change_task(u["id"],tid,{"complete":"completed","reopen":"active","delete":"deleted"}[action]))
+            if action in ("complete","reopen","delete"):
+                out.append(change_task(u["id"],tid,{"complete":"completed","reopen":"active","delete":"deleted"}[action]))
             elif action=="setPriority":
                 p=str(b.get("priority","P4")).upper()
                 if p not in ("P1","P2","P3","P4"):raise ValueError("Invalid priority")
-                out.append(fetch_one("UPDATE tasks SET priority=%s,updated_at=%s WHERE id=%s RETURNING *",(int(p[1]),now(),tid)))
+                row=fetch_one("UPDATE tasks SET priority=%s,updated_at=%s WHERE id=%s RETURNING *",(int(p[1]),now(),tid))
+                activity(u["id"],"update","task",tid,{"bulk":"setPriority","priority":p})
+                record_sync(u["id"],tok("op"),"task",tid,{"action":"update","data":{"priority":p}})
+                out.append(row)
             elif action=="move":
                 pid=uid(b["projectId"]) if b.get("projectId") else None
                 sid=uid(b["sectionId"]) if b.get("sectionId") else None
-                if pid and not project_access(u["id"],pid,"editor"):raise ValueError("Project not accessible")
                 if sid:
                     sec=fetch_one("SELECT project_id FROM sections WHERE id=%s",(sid,))
                     if not sec or (pid and str(sec["project_id"])!=str(pid)):raise ValueError("Section does not belong to project")
                     pid=str(sec["project_id"])
-                    if not project_access(u["id"],pid,"editor"):raise ValueError("Section project not accessible")
-                out.append(fetch_one("UPDATE tasks SET project_id=%s,section_id=%s,updated_at=%s WHERE id=%s RETURNING *",(pid,sid,now(),tid)))
+                if pid and not project_access(u["id"],pid,"editor"):raise ValueError("Project not accessible")
+                row=fetch_one("UPDATE tasks SET project_id=%s,section_id=%s,updated_at=%s WHERE id=%s RETURNING *",(pid,sid,now(),tid))
+                activity(u["id"],"update","task",tid,{"bulk":"move","projectId":pid,"sectionId":sid})
+                record_sync(u["id"],tok("op"),"task",tid,{"action":"update","data":{"projectId":pid,"sectionId":sid}})
+                out.append(row)
             else:raise ValueError("Unsupported bulk action")
         return jsonify({"updated":[task_json(x) for x in out if x]})
     except ValueError as e:return bad(str(e))
